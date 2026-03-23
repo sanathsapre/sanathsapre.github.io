@@ -7,7 +7,7 @@ tags: [character driver, workqueue, spinlock, poll, v4l2, beaglebone]
 
 I didn't start with a plan to write kernel drivers. I started with a question.
 
-I was working at a hardware startup, reading through driver code I barely understood, and kept hitting the same wall — I could read the code, follow the syntax, but I had no mental model for *why* it was written that way. Why spinlock here and not mutex? Why does this function call `schedule_work` instead of doing the work directly? Why does the read function sleep, and how does it know when to wake up?
+I was looking into the linux kernel, reading through driver code I barely understood, and kept hitting the same wall — I could read the code, follow the syntax, but I had no mental model for *why* it was written that way. Why spinlock here and not mutex? Why does this function call `schedule_work` instead of doing the work directly? Why does the read function sleep, and how does it know when to wake up?
 
 The only way I know how to answer questions like that is to build something from scratch, break it, fix it, and repeat until the answer stops feeling like memorisation and starts feeling like understanding.
 
