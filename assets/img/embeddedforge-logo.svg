@@ -1,0 +1,156 @@
+<svg width="400" height="400" viewBox="0 0 680 680" xmlns="http://www.w3.org/2000/svg">
+<style>
+  .bg { fill: #0a0e1a; }
+  .brain-fill { fill: #0d1220; }
+  .brain-outline { fill: none; stroke: #00d4ff; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+  .pcb { stroke: #00d4ff; stroke-width: 1.4; fill: none; stroke-linecap: square; }
+  .pcb-dim { stroke: #00d4ff; stroke-width: 1; fill: none; stroke-linecap: square; opacity: 0.3; }
+  .via { fill: #0a0e1a; stroke: #00d4ff; stroke-width: 1.4; }
+  .via-hot { fill: #00d4ff; }
+  .amber { stroke: #f97316; stroke-width: 1.4; fill: none; stroke-linecap: square; }
+  .amber-dim { stroke: #f97316; stroke-width: 1; fill: none; stroke-linecap: square; opacity: 0.35; }
+  .na { fill: #f97316; }
+  .na-ring { fill: #0a0e1a; stroke: #f97316; stroke-width: 1.4; }
+  .border { fill: none; stroke: #00d4ff; stroke-width: 1; opacity: 0.2; }
+  .grid { stroke: #00d4ff; stroke-width: 0.3; opacity: 0.06; }
+</style>
+
+<circle cx="340" cy="320" r="300" class="bg"/>
+<circle cx="340" cy="320" r="300" class="border"/>
+<circle cx="340" cy="320" r="284" class="border"/>
+
+<line x1="120" y1="60" x2="120" y2="560" class="grid"/>
+<line x1="180" y1="60" x2="180" y2="560" class="grid"/>
+<line x1="240" y1="60" x2="240" y2="560" class="grid"/>
+<line x1="300" y1="60" x2="300" y2="560" class="grid"/>
+<line x1="340" y1="60" x2="340" y2="560" class="grid"/>
+<line x1="380" y1="60" x2="380" y2="560" class="grid"/>
+<line x1="440" y1="60" x2="440" y2="560" class="grid"/>
+<line x1="500" y1="60" x2="500" y2="560" class="grid"/>
+<line x1="560" y1="60" x2="560" y2="560" class="grid"/>
+<line x1="60" y1="120" x2="620" y2="120" class="grid"/>
+<line x1="60" y1="180" x2="620" y2="180" class="grid"/>
+<line x1="60" y1="240" x2="620" y2="240" class="grid"/>
+<line x1="60" y1="300" x2="620" y2="300" class="grid"/>
+<line x1="60" y1="360" x2="620" y2="360" class="grid"/>
+<line x1="60" y1="420" x2="620" y2="420" class="grid"/>
+<line x1="60" y1="480" x2="620" y2="480" class="grid"/>
+
+<path d="M340,110 C312,102 280,110 258,128 C232,148 220,174 223,202 C210,210 200,224 202,242 C194,254 192,270 200,282 C192,296 194,314 204,325 C200,342 207,360 220,368 C224,385 234,399 249,405 C260,425 276,438 294,440 C307,452 325,457 340,455 C355,457 373,452 386,440 C404,438 420,425 431,405 C446,399 456,385 460,368 C473,360 480,342 476,325 C486,314 488,296 480,282 C488,270 486,254 478,242 C480,224 470,210 457,202 C460,174 448,148 422,128 C400,110 368,102 340,110Z" class="brain-fill"/>
+<path d="M340,110 C312,102 280,110 258,128 C232,148 220,174 223,202 C210,210 200,224 202,242 C194,254 192,270 200,282 C192,296 194,314 204,325 C200,342 207,360 220,368 C224,385 234,399 249,405 C260,425 276,438 294,440 C307,452 325,457 340,455 C355,457 373,452 386,440 C404,438 420,425 431,405 C446,399 456,385 460,368 C473,360 480,342 476,325 C486,314 488,296 480,282 C488,270 486,254 478,242 C480,224 470,210 457,202 C460,174 448,148 422,128 C400,110 368,102 340,110Z" class="brain-outline"/>
+
+<line x1="240" y1="150" x2="240" y2="180" class="pcb"/>
+<line x1="240" y1="180" x2="280" y2="180" class="pcb"/>
+<line x1="280" y1="180" x2="280" y2="240" class="pcb"/>
+<line x1="280" y1="240" x2="240" y2="240" class="pcb"/>
+<line x1="240" y1="240" x2="240" y2="300" class="pcb"/>
+<line x1="240" y1="300" x2="280" y2="300" class="pcb"/>
+<line x1="280" y1="300" x2="280" y2="360" class="pcb"/>
+<line x1="280" y1="360" x2="240" y2="360" class="pcb"/>
+<line x1="240" y1="360" x2="240" y2="400" class="pcb"/>
+<circle cx="240" cy="180" r="4" class="via-hot"/>
+<circle cx="280" cy="240" r="4" class="via-hot"/>
+<circle cx="240" cy="300" r="4" class="via-hot"/>
+<circle cx="280" cy="360" r="4" class="via-hot"/>
+<rect x="232" y="142" width="16" height="16" rx="2" class="via"/>
+<rect x="232" y="392" width="16" height="16" rx="2" class="via"/>
+<line x1="240" y1="180" x2="220" y2="180" class="pcb-dim"/>
+<line x1="220" y1="180" x2="220" y2="240" class="pcb-dim"/>
+<line x1="220" y1="240" x2="240" y2="240" class="pcb-dim"/>
+<circle cx="220" cy="210" r="3" class="via-hot" opacity="0.4"/>
+<line x1="240" y1="300" x2="215" y2="300" class="pcb-dim"/>
+<line x1="215" y1="300" x2="215" y2="360" class="pcb-dim"/>
+<line x1="215" y1="360" x2="240" y2="360" class="pcb-dim"/>
+<circle cx="215" cy="330" r="3" class="via-hot" opacity="0.3"/>
+
+<line x1="440" y1="150" x2="440" y2="180" class="pcb"/>
+<line x1="440" y1="180" x2="400" y2="180" class="pcb"/>
+<line x1="400" y1="180" x2="400" y2="240" class="pcb"/>
+<line x1="400" y1="240" x2="440" y2="240" class="pcb"/>
+<line x1="440" y1="240" x2="440" y2="300" class="pcb"/>
+<line x1="440" y1="300" x2="400" y2="300" class="pcb"/>
+<line x1="400" y1="300" x2="400" y2="360" class="pcb"/>
+<line x1="400" y1="360" x2="440" y2="360" class="pcb"/>
+<line x1="440" y1="360" x2="440" y2="400" class="pcb"/>
+<circle cx="440" cy="180" r="4" class="via-hot"/>
+<circle cx="400" cy="240" r="4" class="via-hot"/>
+<circle cx="440" cy="300" r="4" class="via-hot"/>
+<circle cx="400" cy="360" r="4" class="via-hot"/>
+<rect x="432" y="142" width="16" height="16" rx="2" class="via"/>
+<rect x="432" y="392" width="16" height="16" rx="2" class="via"/>
+<line x1="440" y1="180" x2="460" y2="180" class="pcb-dim"/>
+<line x1="460" y1="180" x2="460" y2="240" class="pcb-dim"/>
+<line x1="460" y1="240" x2="440" y2="240" class="pcb-dim"/>
+<circle cx="460" cy="210" r="3" class="via-hot" opacity="0.4"/>
+<line x1="440" y1="300" x2="465" y2="300" class="pcb-dim"/>
+<line x1="465" y1="300" x2="465" y2="360" class="pcb-dim"/>
+<line x1="465" y1="360" x2="440" y2="360" class="pcb-dim"/>
+<circle cx="465" cy="330" r="3" class="via-hot" opacity="0.3"/>
+
+<line x1="340" y1="130" x2="340" y2="180" class="pcb"/>
+<line x1="340" y1="180" x2="280" y2="180" class="pcb"/>
+<line x1="340" y1="180" x2="400" y2="180" class="pcb"/>
+<line x1="340" y1="300" x2="280" y2="300" class="pcb"/>
+<line x1="340" y1="300" x2="400" y2="300" class="pcb"/>
+<line x1="340" y1="420" x2="280" y2="420" class="pcb-dim"/>
+<line x1="340" y1="420" x2="400" y2="420" class="pcb-dim"/>
+<line x1="340" y1="180" x2="340" y2="300" class="pcb"/>
+<line x1="340" y1="300" x2="340" y2="420" class="pcb-dim"/>
+<circle cx="340" cy="180" r="5" class="via-hot"/>
+<circle cx="340" cy="300" r="5" class="via-hot"/>
+<circle cx="340" cy="420" r="4" class="via-hot" opacity="0.5"/>
+<rect x="332" y="122" width="16" height="16" rx="2" class="via"/>
+
+<line x1="220" y1="155" x2="240" y2="155" class="amber"/>
+<line x1="240" y1="155" x2="240" y2="180" class="amber"/>
+<circle cx="220" cy="155" r="5" class="na-ring"/>
+<circle cx="220" cy="155" r="2.5" class="na"/>
+<line x1="210" y1="270" x2="240" y2="270" class="amber"/>
+<line x1="240" y1="270" x2="240" y2="240" class="amber"/>
+<circle cx="210" cy="270" r="5" class="na-ring"/>
+<circle cx="210" cy="270" r="2.5" class="na"/>
+<line x1="222" y1="385" x2="240" y2="385" class="amber"/>
+<line x1="240" y1="385" x2="240" y2="360" class="amber"/>
+<circle cx="222" cy="385" r="5" class="na-ring"/>
+<circle cx="222" cy="385" r="2.5" class="na"/>
+
+<line x1="460" y1="155" x2="440" y2="155" class="amber"/>
+<line x1="440" y1="155" x2="440" y2="180" class="amber"/>
+<circle cx="460" cy="155" r="5" class="na-ring"/>
+<circle cx="460" cy="155" r="2.5" class="na"/>
+<line x1="470" y1="270" x2="440" y2="270" class="amber"/>
+<line x1="440" y1="270" x2="440" y2="240" class="amber"/>
+<circle cx="470" cy="270" r="5" class="na-ring"/>
+<circle cx="470" cy="270" r="2.5" class="na"/>
+<line x1="458" y1="385" x2="440" y2="385" class="amber"/>
+<line x1="440" y1="385" x2="440" y2="360" class="amber"/>
+<circle cx="458" cy="385" r="5" class="na-ring"/>
+<circle cx="458" cy="385" r="2.5" class="na"/>
+
+<line x1="280" y1="240" x2="280" y2="260" class="amber-dim"/>
+<line x1="280" y1="260" x2="260" y2="260" class="amber-dim"/>
+<circle cx="260" cy="260" r="3" class="na" opacity="0.4"/>
+<line x1="400" y1="240" x2="400" y2="260" class="amber-dim"/>
+<line x1="400" y1="260" x2="420" y2="260" class="amber-dim"/>
+<circle cx="420" cy="260" r="3" class="na" opacity="0.4"/>
+<line x1="280" y1="360" x2="280" y2="380" class="amber-dim"/>
+<line x1="280" y1="380" x2="260" y2="380" class="amber-dim"/>
+<circle cx="260" cy="380" r="3" class="na" opacity="0.4"/>
+<line x1="400" y1="360" x2="400" y2="380" class="amber-dim"/>
+<line x1="400" y1="380" x2="420" y2="380" class="amber-dim"/>
+<circle cx="420" cy="380" r="3" class="na" opacity="0.4"/>
+
+<line x1="240" y1="420" x2="280" y2="420" class="amber"/>
+<line x1="400" y1="420" x2="440" y2="420" class="amber"/>
+<line x1="280" y1="420" x2="340" y2="420" class="amber"/>
+<line x1="400" y1="420" x2="340" y2="420" class="amber"/>
+<circle cx="340" cy="420" r="6" class="na-ring"/>
+<circle cx="340" cy="420" r="3" class="na"/>
+<circle cx="240" cy="420" r="4" class="na"/>
+<circle cx="440" cy="420" r="4" class="na"/>
+
+<line x1="155" y1="476" x2="525" y2="476" stroke="#00d4ff" stroke-width="0.8" opacity="0.25"/>
+
+<text x="340" y="512" text-anchor="middle" font-family="monospace" font-weight="700" fill="#00d4ff" font-size="30px" letter-spacing="1px">EMBEDDED<tspan fill="#f97316">FORGE</tspan></text>
+<text x="340" y="542" text-anchor="middle" font-family="monospace" fill="#00d4ff" font-size="13px" letter-spacing="4px" opacity="0.6">NOTES FROM THE KERNEL SPACE</text>
+</svg>
