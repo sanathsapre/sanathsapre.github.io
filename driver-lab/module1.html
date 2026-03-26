@@ -1,56 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Character Drivers | Embedded Forge</title>
-    <link rel="stylesheet" href="../style.css">
+<meta charset="UTF-8">
+<title>Character Drivers</title>
+<link rel="stylesheet" href="../style.css">
 </head>
 <body>
 
 <div class="container">
 
-    <aside class="sidebar">
-        <h2>Driver Lab</h2>
-        <ul>
-            <li><a href="module1.html">Char Drivers</a></li>
-            <li><a href="module2.html">Blocking I/O</a></li>
-        </ul>
-    </aside>
+<aside class="sidebar">
+    <h2>Driver Lab</h2>
+    <ul>
+        <li><a href="module1.html">Char Drivers</a></li>
+    </ul>
+</aside>
 
-    <main class="content">
+<main class="content">
+    <h1>Character Device Drivers</h1>
 
-        <h1>Character Device Drivers in Linux</h1>
+    <h2>Problem</h2>
+    <p>How userspace interacts with kernel devices via file abstraction.</p>
 
-        <p style="color:#94a3b8;">
-            From basic device abstraction to kernel-user interaction.
-        </p>
+    <h2>Implementation</h2>
+    <ul>
+        <li>register_chrdev</li>
+        <li>file_operations</li>
+        <li>open/read/write</li>
+    </ul>
 
-        <section>
-            <h2>Problem</h2>
-            <p>
-                How does userspace interact with kernel-space devices in Linux?
-            </p>
-        </section>
-
-        <section>
-            <h2>Implementation</h2>
-            <ul>
-                <li>register_chrdev</li>
-                <li>file_operations</li>
-                <li>open/read/write handlers</li>
-            </ul>
-        </section>
-
-        <section>
-            <h2>Key Insights</h2>
-            <ul>
-                <li>Devices are abstracted as files</li>
-                <li>VFS routes system calls to drivers</li>
-                <li>file_operations defines driver behavior</li>
-            </ul>
-        </section>
-
-    </main>
+    <h2>Key Insight</h2>
+    <p>Linux treats devices as files using VFS abstraction.</p>
+</main>
 
 </div>
 
