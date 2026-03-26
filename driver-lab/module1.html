@@ -1,3 +1,12 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Character Drivers | Embedded Forge</title>
+    <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
 <div class="container">
 
     <aside class="sidebar">
@@ -9,7 +18,41 @@
     </aside>
 
     <main class="content">
-        <!-- your content -->
+
+        <h1>Character Device Drivers in Linux</h1>
+
+        <p style="color:#94a3b8;">
+            From basic device abstraction to kernel-user interaction.
+        </p>
+
+        <section>
+            <h2>Problem</h2>
+            <p>
+                How does userspace interact with kernel-space devices in Linux?
+            </p>
+        </section>
+
+        <section>
+            <h2>Implementation</h2>
+            <ul>
+                <li>register_chrdev</li>
+                <li>file_operations</li>
+                <li>open/read/write handlers</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Key Insights</h2>
+            <ul>
+                <li>Devices are abstracted as files</li>
+                <li>VFS routes system calls to drivers</li>
+                <li>file_operations defines driver behavior</li>
+            </ul>
+        </section>
+
     </main>
 
 </div>
+
+</body>
+</html>
