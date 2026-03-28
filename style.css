@@ -1,0 +1,32 @@
+
+body {
+  margin:0;
+  font-family: 'Segoe UI', sans-serif;
+  background:#0b0f1a;
+  color:#e6edf3;
+}
+.container {
+  max-width:1100px;
+  margin:auto;
+  padding:40px 20px;
+}
+h1 { font-size:42px; margin:0; }
+h2 { margin-top:50px; }
+.subtitle { color:#8b949e; }
+.section { margin-top:60px; }
+.cards {
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px,1fr));
+  gap:20px;
+}
+.card {
+  background:#161b22;
+  padding:20px;
+  border-radius:12px;
+  transition:0.3s;
+}
+.card:hover {
+  transform:translateY(-6px);
+  background:#1f2937;
+}
+a { color:#58a6ff; text-decoration:none; }
