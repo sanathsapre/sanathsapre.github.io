@@ -2,13 +2,128 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Timer Driver</title>
+<title>04 — Kernel Timer Driver</title>
 <link rel="stylesheet" href="../style.css">
+<style>
+  pre { background: #0d1117; border: 1px solid #1f2937; border-radius: 8px; padding: 18px; overflow-x: auto; font-size: 13px; line-height: 1.6; }
+  code { font-family: 'Cascadia Code', 'Fira Code', monospace; color: #e6edf3; }
+  .tag { display: inline-block; background: #1f3a5f; color: #58a6ff; font-size: 12px; padding: 2px 8px; border-radius: 4px; margin-right: 6px; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #1f2937; padding: 10px 14px; text-align: left; }
+  th { background: #161b22; color: #58a6ff; }
+  td { background: #0f1524; }
+  .back { display: inline-block; margin-bottom: 32px; color: #58a6ff; }
+  .section { margin-top: 40px; }
+  h2 { color: #58a6ff; border-bottom: 1px solid #1f2937; padding-bottom: 8px; }
+  h3 { color: #e6edf3; margin-top: 24px; }
+  .note { background: #161b22; border-left: 3px solid #58a6ff; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; }
+  .warn { background: #1a1200; border-left: 3px solid #d29922; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; color: #d29922; }
+</style>
 </head>
 <body>
 <div class="main" style="margin-left:260px;">
-<h1>Timer Driver</h1>
-<p>Time-based event generation.</p>
+
+  <a class="back" href="../index.html">← Back</a>
+
+  <h1>04 — Kernel Timer Driver</h1>
+  <p style="color:#8b949e;">Async event generation · <span class="tag">timer_list</span><span class="tag">softirq context</span><span class="tag">spinlock_irqsave</span><span class="tag">del_timer_sync</span></p>
+
+  <div class="section">
+    <h2>Overview</h2>
+    <p>A kernel timer fires every 1000ms and writes <code>timer_event_N</code> into a ring buffer. Userspace reads events via blocking <code>read()</code>. Timer start/stop is controlled via <code>ioctl()</code>. This introduces the critical constraint: timer callbacks run in <strong>softirq context</strong> — mutex is forbidden, spinlock is mandatory.</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Parameter</th><th>Value</th></tr>
+        <tr><td>Device node</td><td><code>/dev/sanath_timer</code></td></tr>
+        <tr><td>Timer interval</td><td>1000 ms</td></tr>
+        <tr><td>Buffer</td><td>16 rows × 128 bytes</td></tr>
+        <tr><td>Synchronization</td><td><code>spinlock_t</code> with <code>irqsave/irqrestore</code></td></tr>
+        <tr><td>Event format</td><td><code>timer_event_N\n</code></td></tr>
+        <tr><td>IOCTL magic</td><td><code>'f'</code></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Spinlock vs Mutex — Context Matters</h2>
+    <p>The timer callback runs in softirq context. Mutexes can sleep — illegal in softirq. Spinlocks are the only option.</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Primitive</th><th>Can Sleep</th><th>Safe in Softirq</th></tr>
+        <tr><td><code>mutex</code></td><td>Yes</td><td>❌ No</td></tr>
+        <tr><td><code>spinlock_t</code></td><td>No</td><td>✅ Yes</td></tr>
+      </table>
+    </div>
+    <pre><code>unsigned long flags;
+spin_lock_irqsave(&kernel_logger.lock, flags);
+/* critical section — no sleeping, no copy_to_user */
+spin_unlock_irqrestore(&kernel_logger.lock, flags);</code></pre>
+    <div class="note"><code>irqsave/irqrestore</code> saves the CPU interrupt enable state before locking and restores it exactly on unlock — required when the lock is shared between process context and interrupt context.</div>
+  </div>
+
+  <div class="section">
+    <h2>What Cannot Run Under Spinlock</h2>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Function</th><th>Reason</th><th>Safe?</th></tr>
+        <tr><td><code>wake_up_interruptible</code></td><td>Touches scheduler</td><td>❌ Move outside</td></tr>
+        <tr><td><code>copy_to_user</code></td><td>May page fault (sleep)</td><td>❌ Never</td></tr>
+        <tr><td><code>kmalloc(GFP_KERNEL)</code></td><td>May sleep</td><td>❌ Never</td></tr>
+        <tr><td><code>mod_timer</code></td><td>Has internal locks</td><td>⚠️ Move outside</td></tr>
+        <tr><td><code>snprintf / memcpy</code></td><td>No side effects</td><td>✅ Yes</td></tr>
+      </table>
+    </div>
+    <h3>Correct copy_to_user pattern</h3>
+    <pre><code>uint8_t tmp[MEM_SIZE];
+
+spin_lock_irqsave(&lock, flags);
+memcpy(tmp, buffer[idx], copy_len);   /* copy inside lock */
+memset(buffer[idx], 0, MEM_SIZE);
+count--;
+spin_unlock_irqrestore(&lock, flags);
+
+if (copy_to_user(user_buf, tmp, copy_len))  /* outside lock */
+    return -EFAULT;</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Timer Active Flag</h2>
+    <p><code>del_timer_sync()</code> waits for any in-progress callback to finish, but it cannot prevent a callback that has already started from re-arming the timer. The <code>timer_active</code> flag solves this.</p>
+    <pre><code>/* STOP ioctl */
+kernel_logger.timer_active = 0;   /* clear first */
+del_timer_sync(&etx_timer);       /* then wait */
+
+/* callback — only re-arm if still active */
+if (kernel_logger.timer_active)
+    is_active = 1;
+spin_unlock_irqrestore(&lock, flags);
+
+if (is_active)
+    mod_timer(&etx_timer, jiffies + msecs_to_jiffies(TIMEOUT));</code></pre>
+    <div class="warn">Using <code>del_timer</code> instead of <code>del_timer_sync</code> is a kernel crash waiting to happen — the callback may still be executing on another CPU when the module unloads.</div>
+  </div>
+
+  <div class="section">
+    <h2>Bugs Encountered and Fixed</h2>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Bug</th><th>Fix</th></tr>
+        <tr><td><code>copy_to_user</code> under spinlock</td><td>Moved outside — use local <code>tmp[]</code> buffer</td></tr>
+        <tr><td><code>wake_up</code> under spinlock</td><td>Moved outside critical section</td></tr>
+        <tr><td>Timer not stopping</td><td>Added <code>timer_active</code> flag checked in callback</td></tr>
+        <tr><td><code>del_timer</code> used on exit</td><td>Replaced with <code>del_timer_sync</code></td></tr>
+        <tr><td>Returning <code>MEM_SIZE</code> from read</td><td>Compute actual length with <code>strnlen</code> after wait</td></tr>
+        <tr><td>Length computed before wait</td><td>Move <code>strnlen/min</code> to after spinlock re-acquired</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Source</h2>
+    <p><a href="https://github.com/sanathsapre/linux-driver-lab/tree/main/04_kernel_timer_driver" target="_blank">github.com/sanathsapre/linux-driver-lab → 04_kernel_timer_driver</a></p>
+  </div>
+
 </div>
 </body>
 </html>

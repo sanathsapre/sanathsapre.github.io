@@ -2,13 +2,111 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Workqueue + Poll</title>
+<title>06 — Workqueue + Poll Driver</title>
 <link rel="stylesheet" href="../style.css">
+<style>
+  pre { background: #0d1117; border: 1px solid #1f2937; border-radius: 8px; padding: 18px; overflow-x: auto; font-size: 13px; line-height: 1.6; }
+  code { font-family: 'Cascadia Code', 'Fira Code', monospace; color: #e6edf3; }
+  .tag { display: inline-block; background: #1f3a5f; color: #58a6ff; font-size: 12px; padding: 2px 8px; border-radius: 4px; margin-right: 6px; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #1f2937; padding: 10px 14px; text-align: left; }
+  th { background: #161b22; color: #58a6ff; }
+  td { background: #0f1524; }
+  .back { display: inline-block; margin-bottom: 32px; color: #58a6ff; }
+  .section { margin-top: 40px; }
+  h2 { color: #58a6ff; border-bottom: 1px solid #1f2937; padding-bottom: 8px; }
+  h3 { color: #e6edf3; margin-top: 24px; }
+  .note { background: #161b22; border-left: 3px solid #58a6ff; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; }
+</style>
 </head>
 <body>
 <div class="main" style="margin-left:260px;">
-<h1>Workqueue + Poll</h1>
-<p>Complete asynchronous pipeline.</p>
+
+  <a class="back" href="../index.html">← Back</a>
+
+  <h1>06 — Workqueue + Poll Driver</h1>
+  <p style="color:#8b949e;">Complete async pipeline · <span class="tag">workqueue</span><span class="tag">poll</span><span class="tag">O_NONBLOCK</span><span class="tag">spinlock</span></p>
+
+  <div class="section">
+    <h2>Overview</h2>
+    <p>Combines all mechanisms from drivers 02–05 into a single coherent pipeline: a kernel timer fires → schedules a workqueue item → work writes to ring buffer → wakes up blocked/polling readers. Userspace can access data via blocking read, non-blocking read, or <code>poll()/select()</code>. This architecture directly models a camera frame pipeline.</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Layer</th><th>Mechanism</th><th>Context</th></tr>
+        <tr><td>Event source</td><td>Kernel timer (1000ms)</td><td>Softirq</td></tr>
+        <tr><td>Deferred work</td><td>Workqueue</td><td>Process (kernel thread)</td></tr>
+        <tr><td>Notification</td><td><code>wake_up_interruptible</code></td><td>Process</td></tr>
+        <tr><td>User access</td><td>Blocking / non-blocking / poll</td><td>User process</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Poll with Spinlock</h2>
+    <p>Unlike driver 02 which used a mutex-based approach, here the poll function must use a spinlock because the workqueue also holds a spinlock when updating <code>count</code>.</p>
+    <pre><code>static __poll_t etx_poll(struct file *filp, poll_table *wait)
+{
+    unsigned long flags;
+    __poll_t mask = 0;
+
+    poll_wait(filp, &etx_wait_queue, wait);
+
+    spin_lock_irqsave(&kernel_logger.lock, flags);
+    if (kernel_logger.count > 0)
+        mask = POLLIN | POLLRDNORM;
+    spin_unlock_irqrestore(&kernel_logger.lock, flags);
+
+    return mask;
+}</code></pre>
+    <div class="note">The spinlock inside poll() is necessary here — count is updated from workqueue context which also holds the spinlock. Consistency requires the same lock everywhere.</div>
+  </div>
+
+  <div class="section">
+    <h2>Non-Blocking Read</h2>
+    <pre><code>while (kernel_logger.count == 0) {
+    spin_unlock_irqrestore(&kernel_logger.lock, flags);
+
+    if (filp->f_flags & O_NONBLOCK)
+        return -EAGAIN;
+
+    if (wait_event_interruptible_exclusive(etx_wait_queue,
+                                           kernel_logger.count > 0))
+        return -ERESTARTSYS;
+
+    spin_lock_irqsave(&kernel_logger.lock, flags);
+}</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Full Data Flow</h2>
+    <pre><code>timer_callback()          /* softirq — fires every 1000ms */
+  └─ schedule_work()
+       └─ workqueue_fn()  /* process context */
+            ├─ spin_lock_irqsave
+            ├─ snprintf → ring buffer
+            ├─ advance write_indexer, update count
+            ├─ spin_unlock_irqrestore
+            └─ wake_up_interruptible → unblocks read() or poll()</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Test Programs</h2>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Program</th><th>Purpose</th></tr>
+        <tr><td><code>06_wq_test.c</code></td><td>Blocking read — waits for each worker_event</td></tr>
+        <tr><td><code>06_nbread.c</code></td><td>Non-blocking — expects <code>EAGAIN</code> when empty</td></tr>
+        <tr><td><code>06_poll_test.c</code></td><td>Uses <code>poll()</code> to wait for data, then reads</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Source</h2>
+    <p><a href="https://github.com/sanathsapre/linux-driver-lab/tree/main/06_kernel_wq_poll_driver" target="_blank">github.com/sanathsapre/linux-driver-lab → 06_kernel_wq_poll_driver</a></p>
+  </div>
+
 </div>
 </body>
 </html>

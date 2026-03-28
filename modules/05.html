@@ -2,13 +2,115 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Workqueue Driver</title>
+<title>05 — Workqueue Driver</title>
 <link rel="stylesheet" href="../style.css">
+<style>
+  pre { background: #0d1117; border: 1px solid #1f2937; border-radius: 8px; padding: 18px; overflow-x: auto; font-size: 13px; line-height: 1.6; }
+  code { font-family: 'Cascadia Code', 'Fira Code', monospace; color: #e6edf3; }
+  .tag { display: inline-block; background: #1f3a5f; color: #58a6ff; font-size: 12px; padding: 2px 8px; border-radius: 4px; margin-right: 6px; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #1f2937; padding: 10px 14px; text-align: left; }
+  th { background: #161b22; color: #58a6ff; }
+  td { background: #0f1524; }
+  .back { display: inline-block; margin-bottom: 32px; color: #58a6ff; }
+  .section { margin-top: 40px; }
+  h2 { color: #58a6ff; border-bottom: 1px solid #1f2937; padding-bottom: 8px; }
+  h3 { color: #e6edf3; margin-top: 24px; }
+  .note { background: #161b22; border-left: 3px solid #58a6ff; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; }
+</style>
 </head>
 <body>
 <div class="main" style="margin-left:260px;">
-<h1>Workqueue Driver</h1>
-<p>Deferred execution model.</p>
+
+  <a class="back" href="../index.html">← Back</a>
+
+  <h1>05 — Workqueue Driver</h1>
+  <p style="color:#8b949e;">Deferred execution · <span class="tag">workqueue</span><span class="tag">schedule_work</span><span class="tag">process context</span><span class="tag">timer + work</span></p>
+
+  <div class="section">
+    <h2>Overview</h2>
+    <p>Separates the timer ISR from the actual work. The timer callback fires in softirq context — it does nothing except schedule a work item. The workqueue executes in process context, where it can safely write to the ring buffer and call <code>wake_up</code>. This is the standard pattern for deferring non-trivial work out of interrupt context.</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Parameter</th><th>Value</th></tr>
+        <tr><td>Device node</td><td><code>/dev/sanath_worker</code></td></tr>
+        <tr><td>Timer interval</td><td>1000 ms</td></tr>
+        <tr><td>Work item</td><td>Static — <code>DECLARE_WORK</code></td></tr>
+        <tr><td>Work context</td><td>Process context (kernel thread)</td></tr>
+        <tr><td>Event format</td><td><code>worker_event_N\n</code></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Bottom-Half Mechanisms in Linux</h2>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Mechanism</th><th>Context</th><th>Can Sleep</th></tr>
+        <tr><td>Workqueue</td><td>Process (kernel thread)</td><td>✅ Yes</td></tr>
+        <tr><td>Threaded IRQ</td><td>Process (dedicated thread)</td><td>✅ Yes</td></tr>
+        <tr><td>Softirq</td><td>Atomic</td><td>❌ No</td></tr>
+        <tr><td>Tasklet</td><td>Atomic</td><td>❌ No</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Two-Stage Design</h2>
+    <h3>Stage 1 — Timer callback (softirq, minimal)</h3>
+    <pre><code>void timer_callback(struct timer_list *data)
+{
+    schedule_work(&workqueue);   /* hand off to process context */
+
+    if (kernel_logger.timer_active)
+        mod_timer(&etx_timer, jiffies + msecs_to_jiffies(TIMEOUT));
+}</code></pre>
+
+    <h3>Stage 2 — Work function (process context, does real work)</h3>
+    <pre><code>void workqueue_fn(struct work_struct *work)
+{
+    unsigned long flags;
+
+    spin_lock_irqsave(&kernel_logger.lock, flags);
+    snprintf(kernel_logger.kernel_buffer[kernel_logger.write_indexer],
+             MEM_SIZE, "worker_event_%ld\n", kernel_logger.timer_count++);
+    kernel_logger.write_indexer =
+        (kernel_logger.write_indexer + 1) % ROW_SIZE;
+    if (kernel_logger.count < ROW_SIZE)
+        kernel_logger.count++;
+    else
+        kernel_logger.read_indexer =
+            (kernel_logger.read_indexer + 1) % ROW_SIZE;
+    spin_unlock_irqrestore(&kernel_logger.lock, flags);
+
+    wake_up_interruptible(&etx_wait_queue);
+}</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Static Work Declaration</h2>
+    <pre><code>DECLARE_WORK(workqueue, workqueue_fn);</code></pre>
+    <div class="note">Static declaration is fine for a single, reusable work item. Dynamic allocation with <code>INIT_WORK</code> is used when work items need to be created per-request.</div>
+  </div>
+
+  <div class="section">
+    <h2>Clean Exit</h2>
+    <p>On module unload, the timer is stopped first, then any pending work is flushed — guaranteeing the workqueue function completes before resources are freed.</p>
+    <pre><code>static void __exit etx_driver_exit(void)
+{
+    del_timer_sync(&etx_timer);   /* stop timer, wait for callback */
+    flush_work(&workqueue);       /* wait for any queued work item */
+    device_destroy(dev_class, dev);
+    /* ... */
+}</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Source</h2>
+    <p><a href="https://github.com/sanathsapre/linux-driver-lab/tree/main/05_kernel_workqueue_driver" target="_blank">github.com/sanathsapre/linux-driver-lab → 05_kernel_workqueue_driver</a></p>
+  </div>
+
 </div>
 </body>
 </html>

@@ -2,13 +2,130 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Timer Interrupt</title>
+<title>07 — BBB GPIO Driver</title>
 <link rel="stylesheet" href="../style.css">
+<style>
+  pre { background: #0d1117; border: 1px solid #1f2937; border-radius: 8px; padding: 18px; overflow-x: auto; font-size: 13px; line-height: 1.6; }
+  code { font-family: 'Cascadia Code', 'Fira Code', monospace; color: #e6edf3; }
+  .tag { display: inline-block; background: #1f3a5f; color: #58a6ff; font-size: 12px; padding: 2px 8px; border-radius: 4px; margin-right: 6px; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #1f2937; padding: 10px 14px; text-align: left; }
+  th { background: #161b22; color: #58a6ff; }
+  td { background: #0f1524; }
+  .back { display: inline-block; margin-bottom: 32px; color: #58a6ff; }
+  .section { margin-top: 40px; }
+  h2 { color: #58a6ff; border-bottom: 1px solid #1f2937; padding-bottom: 8px; }
+  h3 { color: #e6edf3; margin-top: 24px; }
+  .note { background: #161b22; border-left: 3px solid #58a6ff; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; }
+  .warn { background: #1a1200; border-left: 3px solid #d29922; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; color: #d29922; }
+</style>
 </head>
 <body>
 <div class="main" style="margin-left:260px;">
-<h1>Timer Interrupt</h1>
-<p>Simulated interrupt-driven design.</p>
+
+  <a class="back" href="../index.html">← Back</a>
+
+  <h1>07 — BBB GPIO Driver</h1>
+  <p style="color:#8b949e;">Real hardware · <span class="tag">gpio_request</span><span class="tag">AM335x</span><span class="tag">USR LED</span><span class="tag">gpio_export</span></p>
+
+  <div class="section">
+    <h2>Overview</h2>
+    <p>The first driver that touches real hardware — the onboard USR0 LED on the BeagleBone Black. Moves from simulated events to actual memory-mapped GPIO output. Controls GPIO1_21 (global GPIO 53) via the kernel GPIO subsystem.</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Parameter</th><th>Value</th></tr>
+        <tr><td>Target</td><td>BeagleBone Black (AM335x)</td></tr>
+        <tr><td>Kernel</td><td>5.10.168-ti-r76</td></tr>
+        <tr><td>Device node</td><td><code>/dev/etx_device</code></td></tr>
+        <tr><td>GPIO</td><td>GPIO1_21 → global GPIO 53</td></tr>
+        <tr><td>LED</td><td>USR0 onboard LED</td></tr>
+        <tr><td>Write <code>1</code></td><td>LED on</td></tr>
+        <tr><td>Write <code>0</code></td><td>LED off</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>GPIO Numbering on BBB</h2>
+    <p>The AM335x has 4 GPIO banks (0–3), each with 32 pins. Global GPIO number = <code>bank × 32 + pin</code>.</p>
+    <pre><code>/* USR0 LED: GPIO bank 1, pin 21 */
+#define GPIO_53  (53)   /* 1 * 32 + 21 = 53 */</code></pre>
+    <div class="table-wrap">
+      <table>
+        <tr><th>LED</th><th>Bank</th><th>Pin</th><th>Global GPIO</th></tr>
+        <tr><td>USR0</td><td>1</td><td>21</td><td>53</td></tr>
+        <tr><td>USR1</td><td>1</td><td>22</td><td>54</td></tr>
+        <tr><td>USR2</td><td>1</td><td>23</td><td>55</td></tr>
+        <tr><td>USR3</td><td>1</td><td>24</td><td>56</td></tr>
+      </table>
+    </div>
+    <div class="warn">The LEDs are owned by the <code>leds-gpio</code> driver at boot. Before loading this driver, release them: <code>echo none &gt; /sys/class/leds/beaglebone:green:usr0/trigger</code></div>
+  </div>
+
+  <div class="section">
+    <h2>GPIO Lifecycle in the Driver</h2>
+    <pre><code>/* Init */
+gpio_is_valid(GPIO_53);             /* sanity check */
+gpio_request(GPIO_53, "GPIO_53");   /* claim ownership */
+gpio_direction_output(GPIO_53, 0);  /* configure as output, start LOW */
+gpio_export(GPIO_53, false);        /* expose in /sys/class/gpio/ */
+
+/* Exit */
+gpio_unexport(GPIO_53);
+gpio_free(GPIO_53);</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Write Handler</h2>
+    <pre><code>static ssize_t etx_write(struct file *filp,
+                         const char __user *buf, size_t len, loff_t *off)
+{
+    uint8_t rec_buf[10] = {0};
+
+    if (copy_from_user(rec_buf, buf, len) > 0)
+        pr_err("ERROR: copy_from_user failed\n");
+
+    if (rec_buf[0] == '1')
+        gpio_set_value(GPIO_53, 1);   /* LED on */
+    else if (rec_buf[0] == '0')
+        gpio_set_value(GPIO_53, 0);   /* LED off */
+    else
+        pr_err("Unknown command: use 1 or 0\n");
+
+    return len;
+}</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Usage</h2>
+    <pre><code># Turn LED on
+echo 1 > /dev/etx_device
+
+# Turn LED off
+echo 0 > /dev/etx_device
+
+# Read current GPIO state
+cat /dev/etx_device
+
+# Or via sysfs (exported)
+echo 1 > /sys/class/gpio/gpio53/value
+cat /sys/class/gpio/gpio53/value</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Cross-Compilation</h2>
+    <p>This driver is built on the host (Dell Latitude 5320, Ubuntu 22.04) and deployed to the BBB via SCP. The Makefile targets <code>make host</code> for cross-compilation and <code>make target</code> for native builds on the BBB.</p>
+    <pre><code>CROSS_COMPILE = arm-linux-gnueabihf-
+ARCH = arm
+KDIR = /home/sanath/bbb-kernel/build</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Source</h2>
+    <p><a href="https://github.com/sanathsapre/linux-driver-lab/tree/main/07_BBB_GPIO_Driver" target="_blank">github.com/sanathsapre/linux-driver-lab → 07_BBB_GPIO_Driver</a></p>
+  </div>
+
 </div>
 </body>
 </html>
