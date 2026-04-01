@@ -1,120 +1,55 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Sanath Kumar | Embedded Systems</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Embedded Forge — Sanath Kumar P Sapre</title>
+<meta name="description" content="Kernel engineer specialising in Linux camera pipelines, video streaming, and embedded systems.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<script src="nav.js"></script>
 
-<div class="layout">
+<div class="page">
+  <section class="hero">
 
-  <aside class="sidebar">
-    <div class="logo-box">
-      <div class="logo">
-        <!-- Replace with your logo -->
-        <!-- <img src="logo.png" alt="logo"> -->
-        L
-      </div>
-      <div class="brand">Embedded Forge</div>
+    <div class="hero-tag a1">kernel engineer · linux · camera systems</div>
+
+    <h1 class="a2">
+      Sanath<br>Kumar<br><em>P Sapre</em>
+    </h1>
+
+    <p class="hero-sub a3">
+      I design real-time camera and video streaming systems on Linux —
+      from sensor capture through kernel drivers to cloud delivery.
+    </p>
+
+    <div class="hero-cta a4">
+      <a href="work.html" class="btn btn-primary">View Core Work</a>
+      <a href="drivers.html" class="btn btn-ghost">Driver Lab →</a>
     </div>
 
-    <nav class="nav">
-      <a href="#about">About</a>
-      <a href="#work">Core Work</a>
-      <a href="#drivers">Driver Lab</a>
-      <a href="#skills">Skills</a>
-      <a href="#contact">Contact</a>
-    </nav>
-  </aside>
-
-  <main class="main">
-
-    <header>
-      <h1>Sanath Kumar P Sapre</h1>
-      <div class="subtitle">Designing real-time camera and video streaming systems on Linux</div>
-    </header>
-
-    <section id="about" class="section">
-      <h2>About</h2>
-      <p>
-      I work on Linux-based embedded systems with a focus on camera pipelines,
-      video streaming, and system-level integration. Over time, my work has
-      evolved from building features to designing complete data paths —
-      from sensor capture to reliable delivery across applications and cloud systems.
-      </p>
-      <p>
-      My focus is on how data flows through systems — across kernel,
-      user space, and network layers — and how each stage can be optimized
-      for latency, throughput, and stability.
-      </p>
-    </section>
-
-    <section id="work" class="section">
-      <h2>Core Work</h2>
-      <div class="cards">
-
-        <div class="card">
-          <b>Camera & Video Streaming Systems</b>
-          <p>Built pipelines using GStreamer, RTSP, and WebRTC with focus on latency and throughput.</p>
-        </div>
-
-        <div class="card">
-          <b>System-Level Integration</b>
-          <p>Worked across kernel, user space, and cloud layers to ensure seamless data flow.</p>
-        </div>
-
-        <div class="card">
-          <b>Performance & Debugging</b>
-          <p>Analyzed bottlenecks across CPU, memory, and I/O paths in embedded systems.</p>
-        </div>
-
+    <div class="pipeline-wrap a5">
+      <div class="pipeline-label">// data path</div>
+      <div class="pipeline">
+        <span class="pn">Sensor</span>
+        <span class="pa">──▶</span>
+        <span class="pn active">V4L2 / Kernel</span>
+        <span class="pa">──▶</span>
+        <span class="pn">GStreamer</span>
+        <span class="pa">──▶</span>
+        <span class="pn">RTSP / WebRTC</span>
+        <span class="pa">──▶</span>
+        <span class="pn">Cloud</span>
       </div>
-    </section>
-
-    <section id="drivers" class="section">
-      <h2>Linux Driver Lab</h2>
-
-      <p>
-      A focused effort to understand kernel-level design through building
-      event-driven drivers that model real camera pipelines.
-      </p>
-
-      <div class="cards">
-        <a href="modules/01.html"><div class="card">Message Queue Driver<br><small>Kernel-user communication</small></div></a>
-        <a href="modules/02.html"><div class="card">Poll Driver<br><small>Non-blocking I/O</small></div></a>
-        <a href="modules/03.html"><div class="card">IOCTL Interface<br><small>Control plane</small></div></a>
-        <a href="modules/04.html"><div class="card">Timer Driver<br><small>Event generation</small></div></a>
-        <a href="modules/05.html"><div class="card">Workqueue Driver<br><small>Deferred execution</small></div></a>
-        <a href="modules/06.html"><div class="card">Workqueue + Poll<br><small>Async pipeline</small></div></a>
-        <a href="modules/07.html"><div class="card">Timer Interrupt<br><small>Interrupt simulation</small></div></a>
-      </div>
-    </section>
-
-    <section id="skills" class="section">
-      <h2>Skills</h2>
-      <p>
-      C, C++, Embedded Linux<br>
-      GStreamer, RTSP, WebRTC<br>
-      USB/UVC, Yocto, BSP<br>
-      Kernel-user interaction
-      </p>
-    </section>
-
-    <section id="contact" class="section">
-      <h2>Contact</h2>
-      <p>
-      Email: sanathkumar767@gmail.com<br>
-      Website: embeddedforge.org
-      </p>
-    </section>
-
-    <div class="footer">
-      © Embedded Forge
     </div>
 
-  </main>
+  </section>
 
+  <footer class="footer">
+    <span><span class="dot"></span> &nbsp;Available for embedded systems opportunities</span>
+    <span>embeddedforge.org</span>
+  </footer>
 </div>
 
 </body>

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>07 — BBB GPIO Driver · Embedded Forge</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<script src="../nav.js"></script>
+<div class="page">
+<div class="mod-wrap">
+
+  <a href="../drivers.html" class="mod-back">← Driver Lab</a>
+
+  <header class="mod-header a1">
+    <div class="mod-num">MODULE 07</div>
+    <h1>BBB GPIO Driver</h1>
+    <p class="sub">Real hardware on BeagleBone Black</p>
+    <div class="mod-tags"><span class="tag">gpio_request</span><span class="tag">AM335x</span><span class="tag">USR LED</span><span class="tag">gpio_export</span></div>
+  </header>
+
+  <div class="mod-section a2"><h2>Overview</h2><p>The first driver that touches real hardware — the onboard USR0 LED on the BeagleBone Black. Controls GPIO1_21 (global GPIO 53) via the kernel GPIO subsystem.</p>
+<table>
+<tr><th>Parameter</th><th>Value</th></tr>
+<tr><td>Target</td><td>BeagleBone Black (AM335x)</td></tr>
+<tr><td>Kernel</td><td>5.10.168-ti-r76</td></tr>
+<tr><td>Device node</td><td><code>/dev/etx_device</code></td></tr>
+<tr><td>GPIO</td><td>GPIO1_21 → global GPIO 53</td></tr>
+<tr><td>LED</td><td>USR0 onboard LED</td></tr>
+</table></div>
+<div class="mod-section a3"><h2>GPIO Numbering on BBB</h2><p>The AM335x has 4 GPIO banks (0–3), each with 32 pins. Global GPIO = <code>bank × 32 + pin</code>.</p>
+<pre><code>/* USR0 LED: GPIO bank 1, pin 21 */
+#define GPIO_53  (53)   /* 1 * 32 + 21 = 53 */</code></pre>
+<table>
+<tr><th>LED</th><th>Bank</th><th>Pin</th><th>Global GPIO</th></tr>
+<tr><td>USR0</td><td>1</td><td>21</td><td>53</td></tr>
+<tr><td>USR1</td><td>1</td><td>22</td><td>54</td></tr>
+<tr><td>USR2</td><td>1</td><td>23</td><td>55</td></tr>
+<tr><td>USR3</td><td>1</td><td>24</td><td>56</td></tr>
+</table>
+<div class="warn">The LEDs are owned by <code>leds-gpio</code> at boot. Release before loading: <code>echo none &gt; /sys/class/leds/beaglebone:green:usr0/trigger</code></div></div>
+<div class="mod-section a4"><h2>GPIO Lifecycle</h2><pre><code>/* Init */
+gpio_is_valid(GPIO_53);
+gpio_request(GPIO_53, "GPIO_53");
+gpio_direction_output(GPIO_53, 0);
+gpio_export(GPIO_53, false);
+
+/* Exit */
+gpio_unexport(GPIO_53);
+gpio_free(GPIO_53);</code></pre></div>
+<div class="mod-section a5"><h2>Write Handler</h2><pre><code>static ssize_t etx_write(struct file *filp,
+                         const char __user *buf, size_t len, loff_t *off)
+{
+    uint8_t rec_buf[10] = {0};
+    if (copy_from_user(rec_buf, buf, len) > 0)
+        pr_err("copy_from_user failed
+");
+    if (rec_buf[0] == '1')      gpio_set_value(GPIO_53, 1);
+    else if (rec_buf[0] == '0') gpio_set_value(GPIO_53, 0);
+    return len;
+}</code></pre></div>
+<div class="mod-section a5"><h2>Usage</h2><pre><code># Turn LED on
+echo 1 > /dev/etx_device
+
+# Turn LED off
+echo 0 > /dev/etx_device
+
+# Via sysfs
+echo 1 > /sys/class/gpio/gpio53/value</code></pre></div>
+<div class="mod-section a5"><h2>Cross-Compilation</h2><p>Built on host (Dell Latitude 5320, Ubuntu 22.04), deployed to BBB via SCP.</p>
+<pre><code>CROSS_COMPILE = arm-linux-gnueabihf-
+ARCH = arm
+KDIR = /home/sanath/bbb-kernel/build</code></pre></div>
+
+
+  <div class="mod-section">
+    <h2>Source</h2>
+    <a href="https://github.com/sanathsapre/linux-driver-lab/tree/main/07_BBB_GPIO_Driver" target="_blank" rel="noopener" class="source-link">
+      ↗ linux-driver-lab / 07_BBB_GPIO_Driver
+    </a>
+  </div>
+
+</div>
+<footer class="footer">
+  <a href="../drivers.html" style="color:var(--muted);text-decoration:none">← Driver Lab</a>
+  <span>Embedded Forge</span>
+</footer>
+</div>
+</body>
+</html>

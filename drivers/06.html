@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>06 — Workqueue + Poll Driver · Embedded Forge</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<script src="../nav.js"></script>
+<div class="page">
+<div class="mod-wrap">
+
+  <a href="../drivers.html" class="mod-back">← Driver Lab</a>
+
+  <header class="mod-header a1">
+    <div class="mod-num">MODULE 06</div>
+    <h1>Workqueue + Poll Driver</h1>
+    <p class="sub">Complete async pipeline</p>
+    <div class="mod-tags"><span class="tag">workqueue</span><span class="tag">poll</span><span class="tag">O_NONBLOCK</span><span class="tag">spinlock</span></div>
+  </header>
+
+  <div class="mod-section a2"><h2>Overview</h2><p>Combines all mechanisms from drivers 02–05 into a single coherent pipeline: a kernel timer fires → schedules a workqueue item → work writes to ring buffer → wakes up blocked/polling readers. This architecture directly models a camera frame pipeline.</p>
+<table>
+<tr><th>Layer</th><th>Mechanism</th><th>Context</th></tr>
+<tr><td>Event source</td><td>Kernel timer (1000ms)</td><td>Softirq</td></tr>
+<tr><td>Deferred work</td><td>Workqueue</td><td>Process (kernel thread)</td></tr>
+<tr><td>Notification</td><td><code>wake_up_interruptible</code></td><td>Process</td></tr>
+<tr><td>User access</td><td>Blocking / non-blocking / poll</td><td>User process</td></tr>
+</table></div>
+<div class="mod-section a3"><h2>Poll with Spinlock</h2><pre><code>static __poll_t etx_poll(struct file *filp, poll_table *wait)
+{
+    unsigned long flags;
+    __poll_t mask = 0;
+    poll_wait(filp, &amp;etx_wait_queue, wait);
+    spin_lock_irqsave(&amp;kernel_logger.lock, flags);
+    if (kernel_logger.count > 0)
+        mask = POLLIN | POLLRDNORM;
+    spin_unlock_irqrestore(&amp;kernel_logger.lock, flags);
+    return mask;
+}</code></pre>
+<div class="note">The spinlock inside poll() is necessary — count is updated from workqueue context which also holds the spinlock. Consistency requires the same lock everywhere.</div></div>
+<div class="mod-section a4"><h2>Full Data Flow</h2><pre><code>timer_callback()          /* softirq — fires every 1000ms */
+  └─ schedule_work()
+       └─ workqueue_fn()  /* process context */
+            ├─ spin_lock_irqsave
+            ├─ snprintf → ring buffer
+            ├─ update write_indexer + count
+            ├─ spin_unlock_irqrestore
+            └─ wake_up_interruptible → unblocks read() or poll()</code></pre></div>
+<div class="mod-section a5"><h2>Test Programs</h2><table>
+<tr><th>Program</th><th>Purpose</th></tr>
+<tr><td><code>06_wq_test.c</code></td><td>Blocking read — waits for each worker_event</td></tr>
+<tr><td><code>06_nbread.c</code></td><td>Non-blocking — expects <code>EAGAIN</code> when empty</td></tr>
+<tr><td><code>06_poll_test.c</code></td><td>Uses <code>poll()</code> to wait for data, then reads</td></tr>
+</table></div>
+
+
+  <div class="mod-section">
+    <h2>Source</h2>
+    <a href="https://github.com/sanathsapre/linux-driver-lab/tree/main/06_kernel_wq_poll_driver" target="_blank" rel="noopener" class="source-link">
+      ↗ linux-driver-lab / 06_kernel_wq_poll_driver
+    </a>
+  </div>
+
+</div>
+<footer class="footer">
+  <a href="../drivers.html" style="color:var(--muted);text-decoration:none">← Driver Lab</a>
+  <span>Embedded Forge</span>
+</footer>
+</div>
+</body>
+</html>

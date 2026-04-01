@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Core Work — Embedded Forge</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="nav.js"></script>
+
+<div class="page">
+  <div class="content">
+
+    <header class="page-header a1">
+      <div class="page-eyebrow">Core Work</div>
+      <h1>What I build.</h1>
+      <p>End-to-end ownership of camera and video data paths on Linux embedded systems.</p>
+    </header>
+
+    <div class="cards cards-2 a2">
+
+      <div class="card">
+        <div class="card-icon">📡</div>
+        <h3>Camera & Video Streaming</h3>
+        <p>
+          Built production pipelines using GStreamer, RTSP, and WebRTC. Tuned for
+          low latency and high throughput. Handled encoder configuration, jitter buffers,
+          packet loss recovery, and adaptive bitrate scenarios.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">⚙️</div>
+        <h3>System-Level Integration</h3>
+        <p>
+          Worked across kernel, user space, and cloud layers — integrating V4L2 camera
+          drivers with GStreamer pipelines, bridging RTSP/WebRTC to cloud ingest endpoints,
+          and ensuring data flows reliably end-to-end.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">🔬</div>
+        <h3>Performance & Debugging</h3>
+        <p>
+          Analysed bottlenecks across CPU, memory, and I/O paths. Used perf, ftrace,
+          and kernel tracing to identify frame drops, DMA stalls, and pipeline latency
+          spikes on resource-constrained embedded targets.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">🧩</div>
+        <h3>Driver Development</h3>
+        <p>
+          Developed and debugged Linux kernel modules covering character drivers,
+          IOCTL interfaces, kernel timers, workqueues, and GPIO — see the Driver Lab
+          for documented implementations.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">🏗️</div>
+        <h3>BSP & Platform Bring-Up</h3>
+        <p>
+          Worked with Yocto-based BSPs to configure kernel builds, device tree overlays,
+          and bootloader settings for ARM embedded targets. Cross-compiled and deployed
+          modules to BeagleBone Black.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">🔗</div>
+        <h3>USB / UVC Cameras</h3>
+        <p>
+          Integrated USB Video Class cameras into Linux pipelines. Handled UVC descriptor
+          parsing, format negotiation, and isochronous USB transfer handling for
+          real-time video capture.
+        </p>
+      </div>
+
+    </div>
+
+    <hr class="divider">
+
+    <div class="a3" style="display:flex; gap:12px; flex-wrap:wrap">
+      <a href="drivers.html" class="btn btn-primary">Explore Driver Lab</a>
+      <a href="about.html" class="btn btn-ghost">About me →</a>
+    </div>
+
+  </div>
+
+  <footer class="footer">
+    <span>Sanath Kumar P Sapre</span>
+    <span>embeddedforge.org</span>
+  </footer>
+</div>
+
+</body>
+</html>

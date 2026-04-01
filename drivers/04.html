@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>04 — Kernel Timer Driver · Embedded Forge</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<script src="../nav.js"></script>
+<div class="page">
+<div class="mod-wrap">
+
+  <a href="../drivers.html" class="mod-back">← Driver Lab</a>
+
+  <header class="mod-header a1">
+    <div class="mod-num">MODULE 04</div>
+    <h1>Kernel Timer Driver</h1>
+    <p class="sub">Async event generation</p>
+    <div class="mod-tags"><span class="tag">timer_list</span><span class="tag">softirq context</span><span class="tag">spinlock_irqsave</span><span class="tag">del_timer_sync</span></div>
+  </header>
+
+  <div class="mod-section a2"><h2>Overview</h2><p>A kernel timer fires every 1000ms and writes <code>timer_event_N</code> into a ring buffer. Userspace reads events via blocking <code>read()</code>. Timer start/stop is controlled via <code>ioctl()</code>. Critical constraint: timer callbacks run in <strong>softirq context</strong> — mutex is forbidden, spinlock is mandatory.</p>
+<table>
+<tr><th>Parameter</th><th>Value</th></tr>
+<tr><td>Device node</td><td><code>/dev/sanath_timer</code></td></tr>
+<tr><td>Timer interval</td><td>1000 ms</td></tr>
+<tr><td>Synchronization</td><td><code>spinlock_t</code> with <code>irqsave/irqrestore</code></td></tr>
+<tr><td>Event format</td><td><code>timer_event_N
+</code></td></tr>
+</table></div>
+<div class="mod-section a3"><h2>Spinlock vs Mutex — Context Matters</h2><table>
+<tr><th>Primitive</th><th>Can Sleep</th><th>Safe in Softirq</th></tr>
+<tr><td><code>mutex</code></td><td>Yes</td><td>❌ No</td></tr>
+<tr><td><code>spinlock_t</code></td><td>No</td><td>✅ Yes</td></tr>
+</table>
+<pre><code>unsigned long flags;
+spin_lock_irqsave(&amp;kernel_logger.lock, flags);
+/* critical section */
+spin_unlock_irqrestore(&amp;kernel_logger.lock, flags);</code></pre>
+<div class="note"><code>irqsave/irqrestore</code> saves the CPU interrupt enable state before locking and restores it exactly on unlock.</div></div>
+<div class="mod-section a4"><h2>What Cannot Run Under Spinlock</h2><table>
+<tr><th>Function</th><th>Reason</th><th>Safe?</th></tr>
+<tr><td><code>wake_up_interruptible</code></td><td>Touches scheduler</td><td>❌ Move outside</td></tr>
+<tr><td><code>copy_to_user</code></td><td>May page fault</td><td>❌ Never</td></tr>
+<tr><td><code>kmalloc(GFP_KERNEL)</code></td><td>May sleep</td><td>❌ Never</td></tr>
+<tr><td><code>mod_timer</code></td><td>Has internal locks</td><td>⚠️ Move outside</td></tr>
+<tr><td><code>snprintf / memcpy</code></td><td>No side effects</td><td>✅ Yes</td></tr>
+</table>
+<h3>Correct copy_to_user pattern</h3>
+<pre><code>uint8_t tmp[MEM_SIZE];
+spin_lock_irqsave(&amp;lock, flags);
+memcpy(tmp, buffer[idx], copy_len);
+count--;
+spin_unlock_irqrestore(&amp;lock, flags);
+if (copy_to_user(user_buf, tmp, copy_len))
+    return -EFAULT;</code></pre></div>
+<div class="mod-section a5"><h2>Bugs Encountered and Fixed</h2><table>
+<tr><th>Bug</th><th>Fix</th></tr>
+<tr><td><code>copy_to_user</code> under spinlock</td><td>Moved outside — use local <code>tmp[]</code> buffer</td></tr>
+<tr><td><code>wake_up</code> under spinlock</td><td>Moved outside critical section</td></tr>
+<tr><td>Timer not stopping</td><td>Added <code>timer_active</code> flag checked in callback</td></tr>
+<tr><td><code>del_timer</code> on exit</td><td>Replaced with <code>del_timer_sync</code></td></tr>
+</table>
+<div class="warn">Using <code>del_timer</code> instead of <code>del_timer_sync</code> is a kernel crash waiting to happen — the callback may still be executing on another CPU when the module unloads.</div></div>
+
+
+  <div class="mod-section">
+    <h2>Source</h2>
+    <a href="https://github.com/sanathsapre/linux-driver-lab/tree/main/04_kernel_timer_driver" target="_blank" rel="noopener" class="source-link">
+      ↗ linux-driver-lab / 04_kernel_timer_driver
+    </a>
+  </div>
+
+</div>
+<footer class="footer">
+  <a href="../drivers.html" style="color:var(--muted);text-decoration:none">← Driver Lab</a>
+  <span>Embedded Forge</span>
+</footer>
+</div>
+</body>
+</html>
