@@ -3,54 +3,579 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Embedded Forge — Sanath Kumar P Sapre</title>
-<meta name="description" content="Kernel engineer specialising in Linux camera pipelines, video streaming, and embedded systems.">
-<link rel="stylesheet" href="style.css">
+<title>Sanath Kumar — Learning Linux from the Inside</title>
+<meta name="description" content="A documented learning journey through Linux kernel internals, camera pipelines, and embedded systems.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+
+/* ── Reset & Tokens ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+:root {
+  --ink:       #0f1117;
+  --ink2:      #1a1f2e;
+  --ink3:      #242b3d;
+  --paper:     #f5f3ee;
+  --paper2:    #eceae4;
+  --paper3:    #e2dfd8;
+  --text:      #1e2330;
+  --muted:     #6b7180;
+  --faint:     #9ca3af;
+  --green:     #16a34a;
+  --green-lo:  rgba(22,163,74,.1);
+  --green-mid: rgba(22,163,74,.2);
+  --amber:     #b45309;
+  --amber-lo:  rgba(180,83,9,.08);
+  --blue:      #1d4ed8;
+  --blue-lo:   rgba(29,78,216,.08);
+  --lora:      'Lora', Georgia, serif;
+  --sans:      'DM Sans', system-ui, sans-serif;
+  --mono:      'JetBrains Mono', monospace;
+  --r:         10px;
+}
+
+body {
+  font-family: var(--sans);
+  background: var(--paper);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+/* ── Nav ── */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 48px; height: 58px;
+  background: rgba(245,243,238,.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--paper3);
+}
+
+.nav-name {
+  font-family: var(--lora); font-size: 15px; font-weight: 600;
+  color: var(--text); text-decoration: none;
+  letter-spacing: -.01em;
+}
+
+.nav-links { display: flex; gap: 6px; list-style: none; }
+.nav-links a {
+  padding: 5px 13px; border-radius: 100px;
+  font-size: 13px; color: var(--muted); text-decoration: none;
+  transition: .15s; border: 1px solid transparent;
+}
+.nav-links a:hover { color: var(--text); border-color: var(--paper3); background: var(--paper2); }
+.nav-links a.active { color: var(--green); background: var(--green-lo); border-color: rgba(22,163,74,.2); }
+
+/* ── Hero ── */
+.hero {
+  min-height: 100vh;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 100px 80px 80px;
+  max-width: 860px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.hero-kicker {
+  font-family: var(--mono); font-size: 11px; color: var(--green);
+  letter-spacing: .12em; text-transform: uppercase;
+  margin-bottom: 24px;
+  display: flex; align-items: center; gap: 10px;
+}
+.hero-kicker::before { content:''; width:28px; height:1px; background: var(--green); }
+
+.hero h1 {
+  font-family: var(--lora); font-size: clamp(38px, 6vw, 66px);
+  font-weight: 600; line-height: 1.1; letter-spacing: -.02em;
+  color: var(--ink); margin-bottom: 24px;
+}
+.hero h1 em { font-style: italic; color: var(--green); }
+
+.hero-body {
+  font-size: 17px; color: var(--muted); line-height: 1.75;
+  max-width: 540px; margin-bottom: 48px;
+}
+
+.hero-scroll {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--mono); font-size: 11px; color: var(--faint);
+  letter-spacing: .06em;
+  animation: bob 2.2s ease-in-out infinite;
+}
+@keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(5px)} }
+
+/* ── Journey wrapper ── */
+.journey {
+  max-width: 840px;
+  margin: 0 auto;
+  padding: 0 48px 120px;
+  position: relative;
+}
+
+/* vertical spine */
+.journey::before {
+  content: '';
+  position: absolute;
+  left: 82px; top: 0; bottom: 0;
+  width: 1px;
+  background: linear-gradient(to bottom, var(--paper3) 0%, var(--paper3) 90%, transparent 100%);
+}
+
+/* ── Arc header (e.g. "Chapter I — The Driver Lab") ── */
+.arc {
+  position: relative;
+  margin-bottom: 16px;
+  padding-top: 80px;
+}
+
+.arc-badge {
+  position: absolute; left: 0; top: 80px;
+  width: 68px; height: 68px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--ink);
+  border-radius: var(--r);
+  color: #fff;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .06em;
+  text-transform: uppercase;
+  z-index: 2;
+}
+.arc-badge-roman { font-size: 22px; font-weight: 500; line-height: 1; }
+
+.arc-content { margin-left: 100px; padding-top: 12px; }
+
+.arc-label {
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  letter-spacing: .1em; text-transform: uppercase; margin-bottom: 8px;
+}
+.arc h2 {
+  font-family: var(--lora); font-size: clamp(24px, 3.5vw, 34px);
+  font-weight: 600; letter-spacing: -.02em; color: var(--ink);
+  margin-bottom: 14px; line-height: 1.15;
+}
+.arc-intro {
+  font-size: 15px; color: var(--muted); line-height: 1.75;
+  max-width: 580px; margin-bottom: 40px;
+}
+
+/* ── Chapter (individual driver) ── */
+.chapter {
+  position: relative;
+  margin-left: 100px;
+  margin-bottom: 24px;
+  padding: 28px 32px;
+  background: #fff;
+  border: 1px solid var(--paper3);
+  border-radius: var(--r);
+  transition: border-color .2s, box-shadow .2s, transform .2s;
+  cursor: default;
+}
+
+.chapter::before {
+  content: '';
+  position: absolute;
+  left: -34px; top: 36px;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--paper3);
+  border: 2px solid var(--paper);
+  transition: background .2s;
+  z-index: 2;
+}
+
+.chapter:hover {
+  border-color: rgba(22,163,74,.25);
+  box-shadow: 0 8px 32px rgba(0,0,0,.07);
+  transform: translateX(4px);
+}
+.chapter:hover::before { background: var(--green); }
+
+/* linked chapters */
+a.chapter {
+  text-decoration: none; color: inherit; display: block;
+}
+
+.ch-top {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 16px;
+  margin-bottom: 10px;
+}
+
+.ch-num {
+  font-family: var(--mono); font-size: 10px; color: var(--faint);
+  letter-spacing: .08em; flex-shrink: 0; padding-top: 2px;
+}
+
+.ch-title {
+  font-family: var(--lora); font-size: 18px; font-weight: 600;
+  color: var(--ink); letter-spacing: -.01em; flex: 1;
+}
+
+.ch-arrow {
+  color: var(--green); font-size: 16px; opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity .2s, transform .2s;
+  flex-shrink: 0;
+}
+a.chapter:hover .ch-arrow { opacity: 1; transform: translateX(0); }
+
+.ch-sub {
+  font-size: 13px; color: var(--muted); margin-bottom: 14px;
+  line-height: 1.6;
+}
+
+.ch-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.ch-tag {
+  font-family: var(--mono); font-size: 10px;
+  padding: 3px 8px; border-radius: 4px;
+  background: var(--paper2); color: var(--muted);
+  border: 1px solid var(--paper3);
+}
+
+/* key insight callout inside a chapter */
+.ch-insight {
+  margin-top: 14px; padding: 12px 14px;
+  background: var(--green-lo);
+  border-left: 2px solid var(--green);
+  border-radius: 0 6px 6px 0;
+  font-size: 12.5px; color: var(--green);
+  font-style: italic; line-height: 1.6;
+}
+
+/* ── Coming next arc ── */
+.arc-next {
+  position: relative;
+  margin-left: 100px;
+  margin-top: 56px;
+  padding: 28px 32px;
+  border: 1.5px dashed var(--paper3);
+  border-radius: var(--r);
+  background: transparent;
+}
+
+.arc-next::before {
+  content: '';
+  position: absolute;
+  left: -34px; top: 28px;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--paper2);
+  border: 2px solid var(--paper3);
+  z-index: 2;
+}
+
+.next-label {
+  font-family: var(--mono); font-size: 10px; color: var(--faint);
+  letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px;
+}
+.next-title {
+  font-family: var(--lora); font-size: 20px; font-weight: 600;
+  color: var(--muted); margin-bottom: 8px;
+}
+.next-body { font-size: 13.5px; color: var(--faint); line-height: 1.7; }
+
+/* ── Footer ── */
+.footer {
+  border-top: 1px solid var(--paper3);
+  padding: 28px 48px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; color: var(--faint);
+  font-family: var(--mono);
+}
+
+.footer a { color: var(--faint); text-decoration: none; }
+.footer a:hover { color: var(--muted); }
+
+/* ── About blurb (nav target) ── */
+.about-strip {
+  background: var(--ink);
+  color: rgba(255,255,255,.75);
+  padding: 72px 80px;
+}
+.about-strip-inner { max-width: 760px; margin: 0 auto; }
+.about-strip h3 {
+  font-family: var(--lora); font-size: 28px; font-weight: 600;
+  color: #fff; margin-bottom: 16px; letter-spacing: -.01em;
+}
+.about-strip p { font-size: 15px; line-height: 1.8; max-width: 600px; }
+.about-strip p + p { margin-top: 14px; }
+.about-links { display: flex; gap: 12px; margin-top: 28px; flex-wrap: wrap; }
+.about-link {
+  padding: 8px 18px; border-radius: 6px;
+  border: 1px solid rgba(255,255,255,.15);
+  color: rgba(255,255,255,.7); text-decoration: none; font-size: 13px;
+  transition: .15s;
+}
+.about-link:hover { background: rgba(255,255,255,.08); color: #fff; }
+
+/* ── Responsive ── */
+@media (max-width: 700px) {
+  .nav { padding: 0 20px; }
+  .nav-links { display: none; }
+  .hero { padding: 90px 24px 60px; }
+  .journey { padding: 0 24px 80px; }
+  .journey::before { left: 18px; }
+  .arc-badge { width: 36px; height: 36px; }
+  .arc-badge-roman { font-size: 14px; }
+  .arc-content, .chapter, .arc-next { margin-left: 52px; }
+  .chapter::before, .arc-next::before { left: -26px; }
+  .about-strip { padding: 48px 24px; }
+  .footer { padding: 20px 24px; flex-direction: column; gap: 8px; }
+}
+
+/* ── Entrance animations ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.hero-kicker { animation: fadeUp .5s .05s both; }
+.hero h1     { animation: fadeUp .5s .12s both; }
+.hero-body   { animation: fadeUp .5s .19s both; }
+.hero-scroll { animation: fadeUp .5s .26s both; }
+
+</style>
 </head>
 <body>
-<script src="nav.js"></script>
 
-<div class="page">
-  <section class="hero">
+<!-- Nav -->
+<nav class="nav">
+  <a href="index.html" class="nav-name">Sanath Kumar P Sapre</a>
+  <ul class="nav-links">
+    <li><a href="#journey" class="active">Journey</a></li>
+    <li><a href="#about">About</a></li>
+    <li><a href="mailto:sanathkumar767@gmail.com">Contact</a></li>
+  </ul>
+</nav>
 
-    <div class="hero-tag a1">kernel engineer · linux · camera systems</div>
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-kicker">learning in public</div>
+  <h1>Learning Linux<br>from the <em>inside out.</em></h1>
+  <p class="hero-body">
+    I work on camera pipelines and video streaming on Linux. This site documents
+    how I got here — the questions I asked, the kernel internals I had to understand,
+    and the drivers I built to answer them.
+  </p>
+  <div class="hero-scroll">↓ &nbsp; scroll to read the story</div>
+</section>
 
-    <h1 class="a2">
-      Sanath<br>Kumar<br><em>P Sapre</em>
-    </h1>
+<!-- Journey -->
+<div class="journey" id="journey">
 
-    <p class="hero-sub a3">
-      I design real-time camera and video streaming systems on Linux —
-      from sensor capture through kernel drivers to cloud delivery.
+  <!-- Arc I: The Driver Lab -->
+  <div class="arc">
+    <div class="arc-badge">
+      <span style="font-size:9px;opacity:.6;letter-spacing:.08em">ARC</span>
+      <span class="arc-badge-roman">I</span>
+    </div>
+    <div class="arc-content">
+      <div class="arc-label">Arc I · In progress</div>
+      <h2>The Linux Driver Lab</h2>
+      <p class="arc-intro">
+        I wanted to understand what actually happens when a camera frame moves through
+        a Linux system. That question led me to the kernel. So I started building drivers —
+        one concept at a time — each one adding a layer of understanding to the last.
+      </p>
+    </div>
+  </div>
+
+  <!-- Chapter 1 -->
+  <a href="drivers/01.html" class="chapter">
+    <div class="ch-top">
+      <span class="ch-num">01</span>
+      <span class="ch-title">Message Queue Driver</span>
+      <span class="ch-arrow">→</span>
+    </div>
+    <p class="ch-sub">
+      The first question: how does data get from the kernel to userspace safely?
+      Built a 16-slot ring buffer exposed as a character device. Writers push, readers block.
     </p>
-
-    <div class="hero-cta a4">
-      <a href="work.html" class="btn btn-primary">View Core Work</a>
-      <a href="drivers.html" class="btn btn-ghost">Driver Lab →</a>
+    <div class="ch-tags">
+      <span class="ch-tag">ring buffer</span>
+      <span class="ch-tag">wait queue</span>
+      <span class="ch-tag">mutex</span>
+      <span class="ch-tag">character driver</span>
     </div>
-
-    <div class="pipeline-wrap a5">
-      <div class="pipeline-label">// data path</div>
-      <div class="pipeline">
-        <span class="pn">Sensor</span>
-        <span class="pa">──▶</span>
-        <span class="pn active">V4L2 / Kernel</span>
-        <span class="pa">──▶</span>
-        <span class="pn">GStreamer</span>
-        <span class="pa">──▶</span>
-        <span class="pn">RTSP / WebRTC</span>
-        <span class="pa">──▶</span>
-        <span class="pn">Cloud</span>
-      </div>
+    <div class="ch-insight">
+      Key insight: the drop-oldest policy under buffer-full is exactly how camera pipelines
+      handle a slow consumer — freshness wins over completeness.
     </div>
+  </a>
 
-  </section>
+  <!-- Chapter 2 -->
+  <a href="drivers/02.html" class="chapter">
+    <div class="ch-top">
+      <span class="ch-num">02</span>
+      <span class="ch-title">Non-Blocking + Poll Driver</span>
+      <span class="ch-arrow">→</span>
+    </div>
+    <p class="ch-sub">
+      Blocking reads aren't always what you want. Added O_NONBLOCK and poll()/select()
+      support so userspace can choose its own access pattern on the same device node.
+    </p>
+    <div class="ch-tags">
+      <span class="ch-tag">O_NONBLOCK</span>
+      <span class="ch-tag">poll/select</span>
+      <span class="ch-tag">EAGAIN</span>
+    </div>
+    <div class="ch-insight">
+      Key insight: poll_wait() doesn't sleep — it just registers the wait queue.
+      The actual sleeping happens in the kernel's poll loop, not in the driver.
+    </div>
+  </a>
 
-  <footer class="footer">
-    <span><span class="dot"></span> &nbsp;Available for embedded systems opportunities</span>
-    <span>embeddedforge.org</span>
-  </footer>
+  <!-- Chapter 3 -->
+  <a href="drivers/03.html" class="chapter">
+    <div class="ch-top">
+      <span class="ch-num">03</span>
+      <span class="ch-title">IOCTL Interface</span>
+      <span class="ch-arrow">→</span>
+    </div>
+    <p class="ch-sub">
+      Read/write moves data. But how does userspace send control commands to a driver?
+      The same way V4L2, ALSA, and USB drivers do it — ioctl(). Built the control plane.
+    </p>
+    <div class="ch-tags">
+      <span class="ch-tag">unlocked_ioctl</span>
+      <span class="ch-tag">_IOR / _IOW</span>
+      <span class="ch-tag">magic number</span>
+    </div>
+  </a>
+
+  <!-- Chapter 4 -->
+  <a href="drivers/04.html" class="chapter">
+    <div class="ch-top">
+      <span class="ch-num">04</span>
+      <span class="ch-title">Kernel Timer Driver</span>
+      <span class="ch-arrow">→</span>
+    </div>
+    <p class="ch-sub">
+      Real camera pipelines generate frames on a timer. This driver does the same —
+      fires every 1000ms and writes an event. But timer callbacks run in softirq context,
+      which changes everything about synchronization.
+    </p>
+    <div class="ch-tags">
+      <span class="ch-tag">timer_list</span>
+      <span class="ch-tag">softirq context</span>
+      <span class="ch-tag">spinlock_irqsave</span>
+      <span class="ch-tag">del_timer_sync</span>
+    </div>
+    <div class="ch-insight">
+      Key insight: mutex can sleep — that makes it illegal in softirq context.
+      Spinlock is mandatory. And copy_to_user() must never run under a spinlock.
+    </div>
+  </a>
+
+  <!-- Chapter 5 -->
+  <a href="drivers/05.html" class="chapter">
+    <div class="ch-top">
+      <span class="ch-num">05</span>
+      <span class="ch-title">Workqueue Driver</span>
+      <span class="ch-arrow">→</span>
+    </div>
+    <p class="ch-sub">
+      The timer callback should do as little as possible. Moved the real work into
+      a workqueue — deferred execution in process context, where sleeping is allowed again.
+    </p>
+    <div class="ch-tags">
+      <span class="ch-tag">workqueue</span>
+      <span class="ch-tag">schedule_work</span>
+      <span class="ch-tag">process context</span>
+      <span class="ch-tag">DECLARE_WORK</span>
+    </div>
+    <div class="ch-insight">
+      Key insight: this two-stage pattern — interrupt schedules work, work does the job —
+      is how real drivers stay responsive without blocking the interrupt handler.
+    </div>
+  </a>
+
+  <!-- Chapter 6 -->
+  <a href="drivers/06.html" class="chapter">
+    <div class="ch-top">
+      <span class="ch-num">06</span>
+      <span class="ch-title">Workqueue + Poll — The Full Pipeline</span>
+      <span class="ch-arrow">→</span>
+    </div>
+    <p class="ch-sub">
+      Everything comes together: timer fires → workqueue writes to ring buffer → wakes
+      up readers. Supports blocking, non-blocking, and poll(). This is the camera frame
+      pipeline in miniature.
+    </p>
+    <div class="ch-tags">
+      <span class="ch-tag">full pipeline</span>
+      <span class="ch-tag">workqueue</span>
+      <span class="ch-tag">poll</span>
+      <span class="ch-tag">spinlock</span>
+    </div>
+    <div class="ch-insight">
+      Key insight: spinlock must be consistent across all contexts that touch shared state.
+      If the workqueue holds it, poll() must too.
+    </div>
+  </a>
+
+  <!-- Chapter 7 -->
+  <a href="drivers/07.html" class="chapter">
+    <div class="ch-top">
+      <span class="ch-num">07</span>
+      <span class="ch-title">BBB GPIO Driver — Real Hardware</span>
+      <span class="ch-arrow">→</span>
+    </div>
+    <p class="ch-sub">
+      First driver that touches actual hardware. Controls the USR0 LED on a BeagleBone
+      Black via GPIO1_21. Moved from simulated events to memory-mapped GPIO on AM335x.
+    </p>
+    <div class="ch-tags">
+      <span class="ch-tag">BeagleBone Black</span>
+      <span class="ch-tag">AM335x</span>
+      <span class="ch-tag">gpio_request</span>
+      <span class="ch-tag">real hardware</span>
+    </div>
+    <div class="ch-insight">
+      Key insight: global GPIO = bank × 32 + pin. And the onboard LEDs are owned by
+      leds-gpio at boot — you have to release them before your driver can claim them.
+    </div>
+  </a>
+
+  <!-- Coming next -->
+  <div class="arc-next">
+    <div class="next-label">Arc II · Not started yet</div>
+    <div class="next-title">What comes next is still being written.</div>
+    <p class="next-body">
+      This site grows as I learn. The next arc will likely go deeper into
+      V4L2 — understanding the actual camera subsystem, not just the primitives
+      underneath it. Or into GStreamer internals. Not sure yet.
+      That uncertainty is part of the journey.
+    </p>
+  </div>
+
 </div>
+
+<!-- About strip -->
+<section class="about-strip" id="about">
+  <div class="about-strip-inner">
+    <h3>Who's building this?</h3>
+    <p>
+      I'm Sanath Kumar P Sapre. I work on Linux-based embedded systems — camera pipelines,
+      video streaming, system-level integration. My day-to-day involves GStreamer, RTSP,
+      WebRTC, and V4L2 on ARM targets.
+    </p>
+    <p>
+      This site is where I document what I'm learning, not just what I know.
+      I think there's more value in showing the process than in presenting a polished portfolio.
+    </p>
+    <div class="about-links">
+      <a href="https://github.com/sanathsapre/linux-driver-lab" target="_blank" class="about-link">GitHub → linux-driver-lab</a>
+      <a href="mailto:sanathkumar767@gmail.com" class="about-link">sanathkumar767@gmail.com</a>
+      <a href="https://embeddedforge.org" class="about-link">embeddedforge.org</a>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <span>Sanath Kumar P Sapre</span>
+  <span>Learning in public · <a href="https://github.com/sanathsapre" target="_blank">github.com/sanathsapre</a></span>
+</footer>
 
 </body>
 </html>

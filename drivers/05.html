@@ -4,74 +4,60 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>05 — Workqueue Driver · Embedded Forge</title>
-<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../driver.css">
 </head>
 <body>
-<script src="../nav.js"></script>
+
+<nav class="nav">
+  <a href="../index.html" class="nav-name">Sanath Kumar P Sapre</a>
+  <a href="../index.html#journey" class="nav-back">← Back to journey</a>
+</nav>
+
 <div class="page">
-<div class="mod-wrap">
-
-  <a href="../drivers.html" class="mod-back">← Driver Lab</a>
-
-  <header class="mod-header a1">
-    <div class="mod-num">MODULE 05</div>
+  <div class="driver-hero">
+    <div class="driver-arc">Arc I · Linux Driver Lab</div>
+    <div class="driver-num">Chapter 05</div>
     <h1>Workqueue Driver</h1>
-    <p class="sub">Deferred execution</p>
-    <div class="mod-tags"><span class="tag">workqueue</span><span class="tag">schedule_work</span><span class="tag">process context</span><span class="tag">timer + work</span></div>
-  </header>
+    <p class="driver-sub">The timer callback should do as little as possible. Move the real work somewhere safer.</p>
+    <div class="driver-tags"><span class="dtag">workqueue</span> <span class="dtag">schedule_work</span> <span class="dtag">process context</span> <span class="dtag">DECLARE_WORK</span></div>
+  </div>
 
-  <div class="mod-section a2"><h2>Overview</h2><p>Separates the timer ISR from actual work. The timer callback fires in softirq context and does nothing except schedule a work item. The workqueue executes in process context where it can safely write to the ring buffer and call <code>wake_up</code>. Standard pattern for deferring non-trivial work out of interrupt context.</p>
-<table>
-<tr><th>Parameter</th><th>Value</th></tr>
-<tr><td>Device node</td><td><code>/dev/sanath_worker</code></td></tr>
-<tr><td>Work item</td><td>Static — <code>DECLARE_WORK</code></td></tr>
-<tr><td>Work context</td><td>Process context (kernel thread)</td></tr>
-</table></div>
-<div class="mod-section a3"><h2>Bottom-Half Mechanisms in Linux</h2><table>
-<tr><th>Mechanism</th><th>Context</th><th>Can Sleep</th></tr>
-<tr><td>Workqueue</td><td>Process (kernel thread)</td><td>✅ Yes</td></tr>
-<tr><td>Threaded IRQ</td><td>Process (dedicated thread)</td><td>✅ Yes</td></tr>
-<tr><td>Softirq</td><td>Atomic</td><td>❌ No</td></tr>
-<tr><td>Tasklet</td><td>Atomic</td><td>❌ No</td></tr>
-</table></div>
-<div class="mod-section a4"><h2>Two-Stage Design</h2><h3>Stage 1 — Timer callback (softirq, minimal)</h3>
-<pre><code>void timer_callback(struct timer_list *data)
+  <div class="driver-body">
+    <div class="section"><h2>Why this driver?</h2><p>Driver 04 worked, but it was doing too much in softirq context — carefully shuffling data around spinlocks to avoid sleeping. The right pattern is simpler: the timer callback should do one thing only — schedule work — and hand everything else to a workqueue running in process context, where sleeping is allowed again.</p></div>
+<div class="section"><h2>Linux bottom-half mechanisms</h2><div class='table-wrap'><table><tr><th>Mechanism</th><th>Context</th><th>Can sleep?</th></tr><tr><td>Workqueue</td><td>Process (kernel thread)</td><td>✅ Yes</td></tr><tr><td>Threaded IRQ</td><td>Process (dedicated thread)</td><td>✅ Yes</td></tr><tr><td>Softirq</td><td>Atomic</td><td>❌ No</td></tr><tr><td>Tasklet</td><td>Atomic</td><td>❌ No</td></tr></table></div></div>
+<div class="section"><h2>Two-stage design</h2><h3>Stage 1 — timer callback (softirq, does almost nothing)</h3><pre><code>void timer_callback(struct timer_list *data)
 {
-    schedule_work(&amp;workqueue);
+    schedule_work(&amp;workqueue);  /* hand off immediately */
     if (kernel_logger.timer_active)
-        mod_timer(&amp;etx_timer, jiffies + msecs_to_jiffies(TIMEOUT));
-}</code></pre>
-<h3>Stage 2 — Work function (process context)</h3>
-<pre><code>void workqueue_fn(struct work_struct *work)
+        mod_timer(&amp;etx_timer,
+                  jiffies + msecs_to_jiffies(TIMEOUT));
+}</code></pre><h3>Stage 2 — work function (process context, does the real work)</h3><pre><code>void workqueue_fn(struct work_struct *work)
 {
     unsigned long flags;
     spin_lock_irqsave(&amp;kernel_logger.lock, flags);
     snprintf(kernel_logger.kernel_buffer[kernel_logger.write_indexer],
-             MEM_SIZE, "worker_event_%ld
-", kernel_logger.timer_count++);
-    kernel_logger.write_indexer = (kernel_logger.write_indexer + 1) % ROW_SIZE;
-    if (kernel_logger.count &lt; ROW_SIZE) kernel_logger.count++;
-    else kernel_logger.read_indexer = (kernel_logger.read_indexer + 1) % ROW_SIZE;
+             MEM_SIZE, "worker_event_%ld\n",
+             kernel_logger.timer_count++);
+    /* advance write pointer, update count */
     spin_unlock_irqrestore(&amp;kernel_logger.lock, flags);
-    wake_up_interruptible(&amp;etx_wait_queue);
-}</code></pre></div>
-<div class="mod-section a5"><h2>Clean Exit</h2><p>On module unload, the timer is stopped first, then any pending work is flushed — guaranteeing the workqueue function completes before resources are freed.</p>
-<pre><code>del_timer_sync(&amp;etx_timer);   /* stop timer */
-flush_work(&amp;workqueue);       /* wait for queued work */</code></pre></div>
+    wake_up_interruptible(&amp;etx_wait_queue); /* safe — we're in process ctx */
+}</code></pre><div class='note'>wake_up_interruptible is now legal — it's called from process context, not from inside the spinlock. This is the core benefit of the workqueue pattern.</div></div>
+<div class="section"><h2>Clean exit</h2><pre><code>del_timer_sync(&amp;etx_timer);  /* stop timer, wait for callback */
+flush_work(&amp;workqueue);      /* wait for any queued work to finish */</code></pre><p>Order matters: stop the timer first so no new work gets scheduled, then flush any work already queued.</p></div>
+<div class="section"><h2>Source</h2><a href='https://github.com/sanathsapre/linux-driver-lab/tree/main/05_kernel_workqueue_driver' target='_blank' rel='noopener' class='source-link'>↗ linux-driver-lab / 05_kernel_workqueue_driver</a></div>
 
 
-  <div class="mod-section">
-    <h2>Source</h2>
-    <a href="https://github.com/sanathsapre/linux-driver-lab/tree/main/05_kernel_workqueue_driver" target="_blank" rel="noopener" class="source-link">
-      ↗ linux-driver-lab / 05_kernel_workqueue_driver
-    </a>
+    <div class="chapter-nav">
+      <a href="04.html">← 04. Kernel Timer Driver</a>
+      <a href="06.html">06. Workqueue + Poll Driver →</a>
+    </div>
   </div>
+</div>
 
-</div>
 <footer class="footer">
-  <a href="../drivers.html" style="color:var(--muted);text-decoration:none">← Driver Lab</a>
-  <span>Embedded Forge</span>
+  <a href="../index.html#journey">← Journey</a>
+  <span>Arc I · Linux Driver Lab</span>
 </footer>
-</div>
+
 </body>
 </html>

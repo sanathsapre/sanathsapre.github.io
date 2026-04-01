@@ -4,69 +4,60 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>02 — Non-Blocking + Poll Driver · Embedded Forge</title>
-<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../driver.css">
 </head>
 <body>
-<script src="../nav.js"></script>
+
+<nav class="nav">
+  <a href="../index.html" class="nav-name">Sanath Kumar P Sapre</a>
+  <a href="../index.html#journey" class="nav-back">← Back to journey</a>
+</nav>
+
 <div class="page">
-<div class="mod-wrap">
-
-  <a href="../drivers.html" class="mod-back">← Driver Lab</a>
-
-  <header class="mod-header a1">
-    <div class="mod-num">MODULE 02</div>
+  <div class="driver-hero">
+    <div class="driver-arc">Arc I · Linux Driver Lab</div>
+    <div class="driver-num">Chapter 02</div>
     <h1>Non-Blocking + Poll Driver</h1>
-    <p class="sub">Event-driven I/O</p>
-    <div class="mod-tags"><span class="tag">O_NONBLOCK</span><span class="tag">poll/select</span><span class="tag">wait queue</span><span class="tag">EAGAIN</span></div>
-  </header>
+    <p class="driver-sub">Blocking reads aren't always the right answer. Time to let userspace choose.</p>
+    <div class="driver-tags"><span class="dtag">O_NONBLOCK</span> <span class="dtag">poll/select</span> <span class="dtag">wait queue</span> <span class="dtag">EAGAIN</span></div>
+  </div>
 
-  <div class="mod-section a2"><h2>Overview</h2><p>Extends the message queue driver with non-blocking read support and <code>poll()/select()</code> integration. Userspace can now choose between blocking, non-blocking, and event-driven access patterns on the same device node.</p>
-<table>
-<tr><th>Parameter</th><th>Value</th></tr>
-<tr><td>Device node</td><td><code>/dev/sanath_queue</code></td></tr>
-<tr><td>Non-blocking read</td><td>Returns <code>-EAGAIN</code> when empty</td></tr>
-<tr><td>Poll support</td><td><code>POLLIN | POLLRDNORM</code> when data available</td></tr>
-<tr><td>Per-open state</td><td><code>etx_priv_t</code> — <code>read_done</code> + <code>write_done</code></td></tr>
-</table></div>
-<div class="mod-section a3"><h2>Non-Blocking Read</h2><p>When the caller opens with <code>O_NONBLOCK</code>, an empty buffer returns immediately with <code>-EAGAIN</code> instead of sleeping. This is the standard POSIX contract for non-blocking I/O.</p>
-<pre><code>while (kernel_logger.count == 0) {
+  <div class="driver-body">
+    <div class="section"><h2>Why this driver?</h2><p>The first driver blocks. But real applications — especially ones monitoring multiple file descriptors — can't afford to block on one. They use <code>poll()</code> or <code>select()</code> to watch many fds at once and act when any of them becomes readable.</p><p>This driver adds that capability to the message queue without breaking the blocking API.</p></div>
+<div class="section"><h2>Non-blocking read</h2><pre><code>while (kernel_logger.count == 0) {
     mutex_unlock(&amp;kernel_logger.etx_mutex);
     if (filp->f_flags &amp; O_NONBLOCK)
-        return -EAGAIN;
+        return -EAGAIN;   /* tell the caller: try again later */
     if (wait_event_interruptible_exclusive(etx_wait_queue,
                                            kernel_logger.count > 0))
         return -ERESTARTSYS;
     mutex_lock(&amp;kernel_logger.etx_mutex);
-}</code></pre></div>
-<div class="mod-section a4"><h2>Poll Implementation</h2><p><code>poll_wait()</code> registers the wait queue with the kernel's polling infrastructure. The driver then checks count and returns the appropriate mask — no sleeping inside poll().</p>
-<pre><code>static __poll_t etx_poll(struct file *filp, poll_table *wait)
+}</code></pre><p>One flag check, one early return. The POSIX contract for non-blocking I/O: don't sleep, return EAGAIN if nothing is ready.</p></div>
+<div class="section"><h2>Poll implementation</h2><pre><code>static __poll_t etx_poll(struct file *filp, poll_table *wait)
 {
-    etx_priv_t *priv = filp->private_data;
     poll_wait(filp, &amp;etx_wait_queue, wait);
     if (kernel_logger.count > 0)
         return POLLIN | POLLRDNORM;
     return 0;
-}</code></pre>
-<div class="note"><code>poll_wait()</code> does NOT sleep. It only registers the wait queue so the kernel knows to wake this fd when data arrives.</div></div>
-<div class="mod-section a5"><h2>Test Programs</h2><table>
-<tr><th>Program</th><th>Purpose</th></tr>
-<tr><td><code>02_nbread.c</code></td><td>Opens with <code>O_NONBLOCK</code>, expects <code>EAGAIN</code> on empty buffer</td></tr>
-<tr><td><code>02_polltest.c</code></td><td>Calls <code>poll()</code> with 5s timeout, reads when <code>POLLIN</code> fires</td></tr>
-</table></div>
+}</code></pre><div class='note'>poll_wait() does not sleep. It registers the wait queue with the kernel's poll infrastructure so the kernel knows which fd to wake when data arrives. The actual sleeping is in the kernel's poll loop, not here.</div></div>
+<div class="section"><h2>Per-open private state</h2><p>Two flags per open file descriptor — <code>read_done</code> and <code>write_done</code> — let each session track its own completion independently.</p><pre><code>typedef struct etx_priv {
+    int read_done;
+    int write_done;
+} etx_priv_t;</code></pre></div>
+<div class="section"><h2>Source</h2><a href='https://github.com/sanathsapre/linux-driver-lab/tree/main/02_nonblocking_poll_driver' target='_blank' rel='noopener' class='source-link'>↗ linux-driver-lab / 02_nonblocking_poll_driver</a></div>
 
 
-  <div class="mod-section">
-    <h2>Source</h2>
-    <a href="https://github.com/sanathsapre/linux-driver-lab/tree/main/02_nonblocking_poll_driver" target="_blank" rel="noopener" class="source-link">
-      ↗ linux-driver-lab / 02_nonblocking_poll_driver
-    </a>
+    <div class="chapter-nav">
+      <a href="01.html">← 01. Message Queue Driver</a>
+      <a href="03.html">03. IOCTL Interface →</a>
+    </div>
   </div>
+</div>
 
-</div>
 <footer class="footer">
-  <a href="../drivers.html" style="color:var(--muted);text-decoration:none">← Driver Lab</a>
-  <span>Embedded Forge</span>
+  <a href="../index.html#journey">← Journey</a>
+  <span>Arc I · Linux Driver Lab</span>
 </footer>
-</div>
+
 </body>
 </html>

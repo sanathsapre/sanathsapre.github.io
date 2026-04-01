@@ -3,32 +3,38 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>06 — Workqueue + Poll Driver · Embedded Forge</title>
-<link rel="stylesheet" href="../style.css">
+<title>06 — Workqueue + Poll — The Full Pipeline · Embedded Forge</title>
+<link rel="stylesheet" href="../driver.css">
 </head>
 <body>
-<script src="../nav.js"></script>
+
+<nav class="nav">
+  <a href="../index.html" class="nav-name">Sanath Kumar P Sapre</a>
+  <a href="../index.html#journey" class="nav-back">← Back to journey</a>
+</nav>
+
 <div class="page">
-<div class="mod-wrap">
+  <div class="driver-hero">
+    <div class="driver-arc">Arc I · Linux Driver Lab</div>
+    <div class="driver-num">Chapter 06</div>
+    <h1>Workqueue + Poll — The Full Pipeline</h1>
+    <p class="driver-sub">Everything comes together. This is the camera frame pipeline in miniature.</p>
+    <div class="driver-tags"><span class="dtag">full pipeline</span> <span class="dtag">workqueue</span> <span class="dtag">poll</span> <span class="dtag">O_NONBLOCK</span> <span class="dtag">spinlock</span></div>
+  </div>
 
-  <a href="../drivers.html" class="mod-back">← Driver Lab</a>
-
-  <header class="mod-header a1">
-    <div class="mod-num">MODULE 06</div>
-    <h1>Workqueue + Poll Driver</h1>
-    <p class="sub">Complete async pipeline</p>
-    <div class="mod-tags"><span class="tag">workqueue</span><span class="tag">poll</span><span class="tag">O_NONBLOCK</span><span class="tag">spinlock</span></div>
-  </header>
-
-  <div class="mod-section a2"><h2>Overview</h2><p>Combines all mechanisms from drivers 02–05 into a single coherent pipeline: a kernel timer fires → schedules a workqueue item → work writes to ring buffer → wakes up blocked/polling readers. This architecture directly models a camera frame pipeline.</p>
-<table>
-<tr><th>Layer</th><th>Mechanism</th><th>Context</th></tr>
-<tr><td>Event source</td><td>Kernel timer (1000ms)</td><td>Softirq</td></tr>
-<tr><td>Deferred work</td><td>Workqueue</td><td>Process (kernel thread)</td></tr>
-<tr><td>Notification</td><td><code>wake_up_interruptible</code></td><td>Process</td></tr>
-<tr><td>User access</td><td>Blocking / non-blocking / poll</td><td>User process</td></tr>
-</table></div>
-<div class="mod-section a3"><h2>Poll with Spinlock</h2><pre><code>static __poll_t etx_poll(struct file *filp, poll_table *wait)
+  <div class="driver-body">
+    <div class="section"><h2>Why this driver?</h2><p>Drivers 01–05 each taught one concept. This one combines all of them into a single working pipeline: a kernel timer generates events, a workqueue processes them safely, a ring buffer stores them, and userspace can read via blocking read, non-blocking read, or poll(). It's a minimal but real model of how a camera driver feeds frames to an application.</p></div>
+<div class="section"><h2>The full data flow</h2><pre><code>timer_callback()          /* softirq — fires every 1000ms */
+  └─ schedule_work()
+       └─ workqueue_fn()  /* process context */
+            ├─ spin_lock_irqsave
+            ├─ snprintf → ring buffer
+            ├─ advance write_indexer, update count
+            ├─ spin_unlock_irqrestore
+            └─ wake_up_interruptible
+                 ├─ unblocks blocking read()
+                 └─ signals poll() waiters</code></pre></div>
+<div class="section"><h2>Poll with spinlock</h2><p>Unlike driver 02 which used mutex, here poll() must use a spinlock — the workqueue holds a spinlock when updating count, so anything that reads count must use the same lock.</p><pre><code>static __poll_t etx_poll(struct file *filp, poll_table *wait)
 {
     unsigned long flags;
     __poll_t mask = 0;
@@ -38,36 +44,22 @@
         mask = POLLIN | POLLRDNORM;
     spin_unlock_irqrestore(&amp;kernel_logger.lock, flags);
     return mask;
-}</code></pre>
-<div class="note">The spinlock inside poll() is necessary — count is updated from workqueue context which also holds the spinlock. Consistency requires the same lock everywhere.</div></div>
-<div class="mod-section a4"><h2>Full Data Flow</h2><pre><code>timer_callback()          /* softirq — fires every 1000ms */
-  └─ schedule_work()
-       └─ workqueue_fn()  /* process context */
-            ├─ spin_lock_irqsave
-            ├─ snprintf → ring buffer
-            ├─ update write_indexer + count
-            ├─ spin_unlock_irqrestore
-            └─ wake_up_interruptible → unblocks read() or poll()</code></pre></div>
-<div class="mod-section a5"><h2>Test Programs</h2><table>
-<tr><th>Program</th><th>Purpose</th></tr>
-<tr><td><code>06_wq_test.c</code></td><td>Blocking read — waits for each worker_event</td></tr>
-<tr><td><code>06_nbread.c</code></td><td>Non-blocking — expects <code>EAGAIN</code> when empty</td></tr>
-<tr><td><code>06_poll_test.c</code></td><td>Uses <code>poll()</code> to wait for data, then reads</td></tr>
-</table></div>
+}</code></pre><div class='note'>The rule: every access to shared state must use the same lock, in every context. If workqueue uses spinlock, poll() uses spinlock too. Mixing lock types on the same data is a bug.</div></div>
+<div class="section"><h2>What three access patterns look like</h2><div class='table-wrap'><table><tr><th>Pattern</th><th>What userspace does</th><th>What the driver does</th></tr><tr><td>Blocking read</td><td>Calls read(), goes to sleep</td><td>Wakes it when data arrives</td></tr><tr><td>Non-blocking read</td><td>Calls read() with O_NONBLOCK</td><td>Returns EAGAIN if empty</td></tr><tr><td>poll()</td><td>Waits on fd with timeout</td><td>Returns POLLIN when buffer has data</td></tr></table></div></div>
+<div class="section"><h2>Source</h2><a href='https://github.com/sanathsapre/linux-driver-lab/tree/main/06_kernel_wq_poll_driver' target='_blank' rel='noopener' class='source-link'>↗ linux-driver-lab / 06_kernel_wq_poll_driver</a></div>
 
 
-  <div class="mod-section">
-    <h2>Source</h2>
-    <a href="https://github.com/sanathsapre/linux-driver-lab/tree/main/06_kernel_wq_poll_driver" target="_blank" rel="noopener" class="source-link">
-      ↗ linux-driver-lab / 06_kernel_wq_poll_driver
-    </a>
+    <div class="chapter-nav">
+      <a href="05.html">← 05. Workqueue Driver</a>
+      <a href="07.html">07. BBB GPIO Driver →</a>
+    </div>
   </div>
+</div>
 
-</div>
 <footer class="footer">
-  <a href="../drivers.html" style="color:var(--muted);text-decoration:none">← Driver Lab</a>
-  <span>Embedded Forge</span>
+  <a href="../index.html#journey">← Journey</a>
+  <span>Arc I · Linux Driver Lab</span>
 </footer>
-</div>
+
 </body>
 </html>

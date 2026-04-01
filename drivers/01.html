@@ -4,86 +4,60 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>01 — Message Queue Driver · Embedded Forge</title>
-<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../driver.css">
 </head>
 <body>
-<script src="../nav.js"></script>
+
+<nav class="nav">
+  <a href="../index.html" class="nav-name">Sanath Kumar P Sapre</a>
+  <a href="../index.html#journey" class="nav-back">← Back to journey</a>
+</nav>
+
 <div class="page">
-<div class="mod-wrap">
-
-  <a href="../drivers.html" class="mod-back">← Driver Lab</a>
-
-  <header class="mod-header a1">
-    <div class="mod-num">MODULE 01</div>
+  <div class="driver-hero">
+    <div class="driver-arc">Arc I · Linux Driver Lab</div>
+    <div class="driver-num">Chapter 01</div>
     <h1>Message Queue Driver</h1>
-    <p class="sub">Kernel-user FIFO communication</p>
-    <div class="mod-tags"><span class="tag">character driver</span><span class="tag">ring buffer</span><span class="tag">wait queue</span><span class="tag">mutex</span></div>
-  </header>
+    <p class="driver-sub">The first question: how does data get from the kernel to userspace safely?</p>
+    <div class="driver-tags"><span class="dtag">character driver</span> <span class="dtag">ring buffer</span> <span class="dtag">wait queue</span> <span class="dtag">mutex</span></div>
+  </div>
 
-  <div class="mod-section a2"><h2>Overview</h2><p>A character driver that exposes a 16-slot × 128-byte FIFO ring buffer to userspace via <code>/dev/sanath_queue</code>. Writers push messages; readers block until data is available. Models the producer-consumer pattern at the core of camera pipeline data paths.</p>
-<table>
-<tr><th>Parameter</th><th>Value</th></tr>
-<tr><td>Device node</td><td><code>/dev/sanath_queue</code></td></tr>
-<tr><td>Buffer</td><td>16 rows × 128 bytes</td></tr>
-<tr><td>Synchronization</td><td><code>mutex</code></td></tr>
-<tr><td>Blocking</td><td><code>wait_event_interruptible_exclusive</code></td></tr>
-<tr><td>Full-buffer policy</td><td>Overwrite oldest (drop-oldest)</td></tr>
-<tr><td>Per-open state</td><td><code>file->private_data</code> (done flag)</td></tr>
-</table></div>
-<div class="mod-section a3"><h2>Ring Buffer Design</h2><p>Two independent index pointers — <code>read_indexer</code> and <code>write_indexer</code> — advance modulo <code>ROW_SIZE</code>. A <code>count</code> field tracks occupancy explicitly, avoiding the index-equality ambiguity between empty and full states.</p>
-<pre><code>typedef struct kernel_logger {
+  <div class="driver-body">
+    <div class="section"><h2>Why this driver?</h2><p>Camera pipelines are producer-consumer systems. A sensor produces frames; an application consumes them. Before I could understand GStreamer or V4L2, I needed to understand the most fundamental version of this: how does a kernel-space producer hand data to a userspace consumer reliably?</p><p>This driver is that question in code — a 16-slot ring buffer exposed through a character device.</p></div>
+<div class="section"><h2>How it works</h2><p>Writers push 128-byte messages into the buffer via <code>write()</code>. Readers call <code>read()</code> and block if the buffer is empty. The kernel wait queue handles the sleeping and waking.</p><div class='table-wrap'><table><tr><th>Parameter</th><th>Value</th></tr><tr><td>Device node</td><td><code>/dev/sanath_queue</code></td></tr><tr><td>Buffer</td><td>16 slots × 128 bytes</td></tr><tr><td>Sync</td><td><code>mutex</code></td></tr><tr><td>Full-buffer policy</td><td>Drop oldest (overwrite)</td></tr></table></div></div>
+<div class="section"><h2>The ring buffer</h2><pre><code>typedef struct kernel_logger {
     uint8_t kernel_buffer[ROW_SIZE][MEM_SIZE];
     uint8_t read_indexer;
     uint8_t write_indexer;
     struct mutex etx_mutex;
     uint8_t count;
-} kernel_logger_t;</code></pre>
-<h3>Drop-Oldest on Full</h3>
-<pre><code>if (kernel_logger.count &lt; ROW_SIZE)
+} kernel_logger_t;</code></pre><h3>Drop-oldest on full</h3><pre><code>if (kernel_logger.count &lt; ROW_SIZE)
     kernel_logger.count++;
 else
     kernel_logger.read_indexer =
-        (kernel_logger.read_indexer + 1) % ROW_SIZE;</code></pre>
-<div class="note">This models real-time streaming systems where freshness matters more than completeness — identical to camera frame drop policy when the consumer is slow.</div></div>
-<div class="mod-section a4"><h2>Blocking Read</h2><p>The reader sleeps on an empty queue and wakes only when a writer adds data. <code>wait_event_interruptible_exclusive</code> ensures only one reader wakes per event, avoiding thundering herd.</p>
-<pre><code>while (kernel_logger.count == 0) {
+        (kernel_logger.read_indexer + 1) % ROW_SIZE;</code></pre><div class='note'>This is identical to how camera pipelines handle a slow consumer — keep the newest frame, discard the oldest. Freshness over completeness.</div></div>
+<div class="section"><h2>Blocking read</h2><pre><code>while (kernel_logger.count == 0) {
     mutex_unlock(&amp;kernel_logger.etx_mutex);
     if (wait_event_interruptible_exclusive(etx_wait_queue,
                                            kernel_logger.count > 0))
         return -ERESTARTSYS;
     mutex_lock(&amp;kernel_logger.etx_mutex);
-}</code></pre></div>
-<div class="mod-section a5"><h2>Per-Open Session State</h2><p>Each <code>open()</code> allocates a <code>done</code> flag via <code>kmalloc</code> and stores it in <code>file->private_data</code>. This ensures a reader gets exactly one message per open.</p>
-<pre><code>static int etx_open(struct inode *inode, struct file *file)
-{
-    int *done = kmalloc(sizeof(int), GFP_KERNEL);
-    if (!done) return -ENOMEM;
-    *done = 0;
-    file->private_data = done;
-    return 0;
-}</code></pre></div>
-<div class="mod-section a5"><h2>Key Concepts</h2><table>
-<tr><th>Concept</th><th>Detail</th></tr>
-<tr><td><code>alloc_chrdev_region</code></td><td>Dynamic major number allocation</td></tr>
-<tr><td><code>cdev_init / cdev_add</code></td><td>Registers file_operations with the kernel</td></tr>
-<tr><td><code>class_create / device_create</code></td><td>Creates device node automatically via udev</td></tr>
-<tr><td><code>copy_to/from_user</code></td><td>Safe kernel↔user data transfer with fault handling</td></tr>
-<tr><td>mutex vs spinlock</td><td>Mutex chosen — read/write run in process context, can sleep</td></tr>
-</table></div>
+}</code></pre><p>The <code>exclusive</code> flag means only one waiter wakes per write event. Without it every reader wakes up, races to grab the mutex, and all but one find nothing to read — the thundering herd problem.</p></div>
+<div class="section"><h2>Key concepts</h2><div class='table-wrap'><table><tr><th>Concept</th><th>What I learned</th></tr><tr><td><code>alloc_chrdev_region</code></td><td>Dynamic major number — the kernel assigns it, you don't hardcode it</td></tr><tr><td><code>cdev_init / cdev_add</code></td><td>Binds your file_operations struct to the character device</td></tr><tr><td><code>class_create / device_create</code></td><td>Creates /dev/sanath_queue automatically via udev</td></tr><tr><td><code>copy_to/from_user</code></td><td>The kernel can't trust user pointers — these functions handle faults safely</td></tr><tr><td>mutex vs spinlock</td><td>Read/write run in process context so they can sleep — mutex is correct here</td></tr></table></div></div>
+<div class="section"><h2>Source</h2><a href='https://github.com/sanathsapre/linux-driver-lab/tree/main/01_message_queue_driver' target='_blank' rel='noopener' class='source-link'>↗ linux-driver-lab / 01_message_queue_driver</a></div>
 
 
-  <div class="mod-section">
-    <h2>Source</h2>
-    <a href="https://github.com/sanathsapre/linux-driver-lab/tree/main/01_message_queue_driver" target="_blank" rel="noopener" class="source-link">
-      ↗ linux-driver-lab / 01_message_queue_driver
-    </a>
+    <div class="chapter-nav">
+      <span></span>
+      <a href="02.html">02. Non-Blocking + Poll Driver →</a>
+    </div>
   </div>
+</div>
 
-</div>
 <footer class="footer">
-  <a href="../drivers.html" style="color:var(--muted);text-decoration:none">← Driver Lab</a>
-  <span>Embedded Forge</span>
+  <a href="../index.html#journey">← Journey</a>
+  <span>Arc I · Linux Driver Lab</span>
 </footer>
-</div>
+
 </body>
 </html>
