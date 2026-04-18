@@ -186,7 +186,7 @@ module_platform_driver(sanath_irq_driver);</code></pre>
         <tr><td>Antenna / external EMI</td><td>Partially</td><td>Partially</td><td>✓ Yes</td></tr>
         <tr><td>Contact bounce</td><td>✗ No</td><td>✓ Yes</td><td>✓ Yes</td></tr>
       </table></div>
-      <p>In this lab the pull-up was already configured via DT overlay (<code>brcm,pull = &lt;2&gt;</code>), ruling out a floating pin. The actual cause was the jumper wire acting as an antenna — picking up EMI from the RPi3's switching regulators and USB power lines. The fix was driving GPIO23 cleanly via sysfs instead of a physical wire.</p>
+      <p>In this lab the pull-up was already configured via DT overlay (<code>brcm,pull = &lt;2&gt;</code>), ruling out a floating pin. The actual cause was the jumper wire acting as an antenna — picking up EMI from the RPi3's switching regulators and USB power lines.</p>
       <div class='warn'>Hardware problems and software problems look identical from the driver — both show up as spurious interrupts in dmesg. Always reason about the physical setup before touching code.</div>
     </div>
 
