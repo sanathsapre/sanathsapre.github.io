@@ -244,6 +244,31 @@ a.chapter:hover .ch-arrow { opacity: 1; transform: translateX(0); }
 }
 
 /* ── Coming next arc ── */
+.arc-divider {
+  margin-left: 100px;
+  margin-top: 48px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.arc-divider-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--faint);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.arc-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--paper3);
+}
+
 .arc-next {
   position: relative;
   margin-left: 100px;
@@ -344,7 +369,7 @@ a.chapter:hover .ch-arrow { opacity: 1; transform: translateX(0); }
   <ul class="nav-links">
     <li><a href="#journey" class="active">Journey</a></li>
     <li><a href="#about">About</a></li>
-    <li><a href="mailto:sanathkumar767@gmail.com">Contact</a></li>
+    <li><a href="mailto:sanath@embeddedforge.org">Contact</a></li>
   </ul>
 </nav>
 
@@ -537,15 +562,47 @@ a.chapter:hover .ch-arrow { opacity: 1; transform: translateX(0); }
     </div>
   </a>
 
+  <!-- Arc II divider -->
+  <div class="arc-divider">
+    <span class="arc-divider-label">Arc II · In progress</span>
+  </div>
+
+  <!-- Chapter 08 -->
+  <a href="https://github.com/sanathsapre/rpi-camera-driver-lab" target="_blank" class="chapter">
+    <div class="ch-top">
+      <span class="ch-num">08</span>
+      <span class="ch-title">RPi3 Platform Driver + GPIO Interrupt — Yocto</span>
+      <span class="ch-arrow">→</span>
+    </div>
+    <p class="ch-sub">
+      First driver on real silicon with a real build system. A platform driver
+      probed via Device Tree overlay on RPi3 — GPIO23 interrupt handled in kernel,
+      built and deployed entirely through a custom Yocto meta layer.
+    </p>
+    <div class="ch-tags">
+      <span class="ch-tag">platform_driver</span>
+      <span class="ch-tag">DT overlay</span>
+      <span class="ch-tag">request_irq</span>
+      <span class="ch-tag">devm_</span>
+      <span class="ch-tag">Yocto/Kirkstone</span>
+      <span class="ch-tag">RPi3</span>
+    </div>
+    <div class="ch-insight">
+      Key insight: the platform bus matches drivers to hardware via the compatible
+      string in the Device Tree — not hardcoded addresses. And a floating wire near
+      a GPIO pin is enough to generate spurious interrupts; physics shows up in dmesg.
+    </div>
+  </a>
+
   <!-- Coming next -->
   <div class="arc-next">
-    <div class="next-label">Arc II · Not started yet</div>
-    <div class="next-title">What comes next is still being written.</div>
+    <div class="next-label">More coming</div>
+    <div class="next-title">Going deeper into the camera subsystem.</div>
     <p class="next-body">
-      This site grows as I learn. The next arc will likely go deeper into
-      V4L2 — understanding the actual camera subsystem, not just the primitives
-      underneath it. Or into GStreamer internals. Not sure yet.
-      That uncertainty is part of the journey.
+      Arc I built the foundations — interrupts, platform drivers, Device Tree,
+      the kernel primitives that every real driver relies on. Arc II goes into
+      V4L2 directly: sensor drivers, videobuf2, and the full camera pipeline
+      on RPi3 with Yocto. This is where the original question gets answered.
     </p>
   </div>
 
@@ -566,8 +623,8 @@ a.chapter:hover .ch-arrow { opacity: 1; transform: translateX(0); }
     </p>
     <div class="about-links">
       <a href="https://github.com/sanathsapre/linux-driver-lab" target="_blank" class="about-link">GitHub → linux-driver-lab</a>
-      <a href="mailto:sanathkumar767@gmail.com" class="about-link">sanathkumar767@gmail.com</a>
-      <a href="https://embeddedforge.org" class="about-link">embeddedforge.org</a>
+      <a href="mailto:sanath@embeddedforge.org" class="about-link">sanath@embeddedforge.org</a>
+      <a href="https://github.com/sanathsapre" target="_blank" class="about-link">github.com/sanathsapre</a>
     </div>
   </div>
 </section>
