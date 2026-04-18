@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>08 — RPi3 Platform Driver + GPIO Interrupt — Yocto · Embedded Forge</title>
+<link rel="stylesheet" href="../driver.css">
+</head>
+<body>
+
+<nav class="nav">
+  <a href="../index.html" class="nav-name">Sanath Kumar P Sapre</a>
+  <a href="../index.html#journey" class="nav-back">← Back to journey</a>
+</nav>
+
+<div class="page">
+  <div class="driver-hero">
+    <div class="driver-arc">Arc II · The Camera Driver Lab</div>
+    <div class="driver-num">Chapter 08</div>
+    <h1>RPi3 Platform Driver + GPIO Interrupt — Yocto</h1>
+    <p class="driver-sub">First driver on real silicon with a real build system. Platform driver probed via Device Tree overlay — GPIO23 interrupt handled in kernel, built and deployed through a custom Yocto meta layer.</p>
+    <div class="driver-tags">
+      <span class="dtag">platform_driver</span>
+      <span class="dtag">DT overlay</span>
+      <span class="dtag">request_irq</span>
+      <span class="dtag">devm_</span>
+      <span class="dtag">Yocto/Kirkstone</span>
+      <span class="dtag">RPi3</span>
+    </div>
+  </div>
+
+  <div class="driver-body">
+
+    <div class="section">
+      <h2>Why this driver?</h2>
+      <p>Lab 07 touched real hardware but still used a simple GPIO API with no Device Tree, no bus model, no build system. Real production drivers don't work that way. This lab introduces the platform driver model — where the kernel matches a driver to hardware via the Device Tree — and wraps the entire thing in a Yocto meta layer. This is the workflow used by every embedded Linux camera driver in the field.</p>
+    </div>
+
+    <div class="section">
+      <h2>The hardware</h2>
+      <div class='table-wrap'><table>
+        <tr><th>Parameter</th><th>Value</th></tr>
+        <tr><td>Target board</td><td>Raspberry Pi 3 (BCM2837)</td></tr>
+        <tr><td>GPIO</td><td>GPIO23 (Pin 16)</td></tr>
+        <tr><td>Interrupt trigger</td><td>Falling edge (IRQF_TRIGGER_FALLING)</td></tr>
+        <tr><td>Pull configuration</td><td>Pull-up via DT overlay (brcm,pull = 2)</td></tr>
+        <tr><td>Build system</td><td>Yocto Kirkstone — custom meta-sanath layer</td></tr>
+        <tr><td>Host</td><td>Dell Latitude 5320, Ubuntu 22.04</td></tr>
+      </table></div>
+    </div>
+
+    <div class="section">
+      <h2>Platform driver model</h2>
+      <p>A platform driver manages devices connected directly to the SoC — not through a bus like I2C or SPI. The kernel matches a platform driver to a device using the <strong>compatible string</strong> in the Device Tree. When the compatible string in a DT node matches a registered driver's <code>of_match_table</code>, the kernel calls that driver's <code>probe()</code> function.</p>
+      <p>This is fundamentally different from earlier labs which had no hardware representation. The platform driver represents real hardware — a GPIO pin on the BCM2837.</p>
+      <pre><code>static const struct of_device_id sanath_irq_of_match[] = {
+    { .compatible = "sanath-irq-lab", },
+    { }
+};
+MODULE_DEVICE_TABLE(of, sanath_irq_of_match);
+
+static struct platform_driver sanath_irq_driver = {
+    .probe  = sanath_irq_probe,
+    .remove = sanath_irq_remove,
+    .driver = {
+        .name           = "sanath-irq-lab",
+        .of_match_table = sanath_irq_of_match,
+    },
+};
+
+module_platform_driver(sanath_irq_driver);</code></pre>
+    </div>
+
+    <div class="section">
+      <h2>Device Tree overlay</h2>
+      <p>The overlay does two things: configures GPIO23 as input with pull-up, and creates the platform device node with the matching compatible string and interrupt binding.</p>
+      <pre><code>/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "brcm,bcm2837";
+
+    fragment@0 {
+        target = &lt;&amp;gpio&gt;;
+        __overlay__ {
+            sanath_irq_pins: sanath-irq-pins {
+                brcm,pins = &lt;23&gt;;
+                brcm,function = &lt;0&gt;;   /* input */
+                brcm,pull = &lt;2&gt;;       /* pull-up */
+            };
+        };
+    };
+
+    fragment@1 {
+        target-path = "/";
+        __overlay__ {
+            sanath_irq_lab: sanath-irq-lab {
+                compatible = "sanath-irq-lab";
+                pinctrl-names = "default";
+                pinctrl-0 = &lt;&amp;sanath_irq_pins&gt;;
+                interrupt-parent = &lt;&amp;gpio&gt;;
+                interrupts = &lt;23 2&gt;;   /* GPIO23, falling edge */
+                status = "okay";
+            };
+        };
+    };
+};</code></pre>
+      <p>The compatible string <code>"sanath-irq-lab"</code> in the overlay matches the driver's <code>of_match_table</code> — this is the link that causes <code>probe()</code> to be called when the overlay is loaded.</p>
+    </div>
+
+    <div class="section">
+      <h2>probe() and devm_ resource management</h2>
+      <p><code>devm_</code> prefixed APIs tie resource lifetime to the device. When <code>remove()</code> is called, all <code>devm_</code> allocated resources are freed automatically by the kernel — no manual cleanup needed.</p>
+      <pre><code>static int sanath_irq_probe(struct platform_device *pdev)
+{
+    struct sanath_irq_data *data;
+    int ret;
+
+    data = devm_kzalloc(&amp;pdev->dev, sizeof(*data), GFP_KERNEL);
+    if (!data)
+        return -ENOMEM;
+
+    init_waitqueue_head(&amp;data->wq);
+
+    data->irq = platform_get_irq(pdev, 0);  /* reads IRQ from DT */
+    if (data->irq &lt; 0)
+        return data->irq;
+
+    ret = devm_request_irq(&amp;pdev->dev, data->irq, sanath_irq_handler,
+                           IRQF_TRIGGER_FALLING, "sanath-irq-lab", data);
+    if (ret)
+        return ret;
+
+    platform_set_drvdata(pdev, data);
+    dev_info(&amp;pdev->dev, "sanath-irq-lab probed successfully\n");
+    return 0;
+}</code></pre>
+      <div class='table-wrap'><table>
+        <tr><th>API</th><th>What it does</th></tr>
+        <tr><td>platform_get_irq(pdev, 0)</td><td>Reads IRQ number from DT node — no hardcoding</td></tr>
+        <tr><td>devm_kzalloc()</td><td>Allocates zeroed memory — freed automatically on remove()</td></tr>
+        <tr><td>devm_request_irq()</td><td>Requests IRQ — released automatically on remove()</td></tr>
+        <tr><td>platform_set_drvdata()</td><td>Attaches per-device struct to the device</td></tr>
+      </table></div>
+    </div>
+
+    <div class="section">
+      <h2>How edge detection works in hardware</h2>
+      <p>Edge detection is done entirely in hardware by the BCM2835 GPIO controller — the CPU never sees the voltage. The controller has dedicated registers:</p>
+      <pre><code>GPIO23 voltage drops 3.3V → 0V
+→ BCM2835 writes GPFEN register (Falling Edge Detect Enable) for GPIO23
+→ Sets status bit in GPEDS register
+→ Raises interrupt line to GIC (Generic Interrupt Controller)
+→ GIC interrupts the CPU
+→ CPU saves state, enters your handler</code></pre>
+      <p>When <code>IRQF_TRIGGER_FALLING</code> is passed to <code>request_irq()</code>, the kernel's <code>pinctrl-bcm2835</code> driver writes to GPFEN for GPIO23. The CPU only sees the interrupt signal — all detection is done before the handler runs.</p>
+    </div>
+
+    <div class="section">
+      <h2>IRQ handler — debounce</h2>
+      <pre><code>static irqreturn_t sanath_irq_handler(int irq, void *dev_id)
+{
+    struct sanath_irq_data *data = dev_id;
+    ktime_t now = ktime_get();
+
+    /* Reject edges within 50ms of last valid interrupt */
+    if (ktime_to_ms(ktime_sub(now, data->last_irq)) &lt; 50)
+        return IRQ_HANDLED;
+
+    data->last_irq = now;
+    schedule_work(&amp;data->work);  /* all real work in workqueue */
+    return IRQ_HANDLED;
+}</code></pre>
+      <p><code>ktime_get()</code> is used instead of <code>jiffies</code> because on RPi3 (HZ=250) one jiffy is 4ms — too coarse for bounce windows of 1–5ms. <code>ktime_get()</code> gives nanosecond resolution and is safe in hardIRQ context. Sleeping calls like <code>msleep()</code> are forbidden in the handler — the CPU cannot be scheduled away during interrupt handling.</p>
+    </div>
+
+    <div class="section">
+      <h2>Spurious interrupts — what actually happened</h2>
+      <p>During testing, interrupts fired even before the jumper wire touched GND. Investigation revealed three distinct causes of spurious GPIO interrupts:</p>
+      <div class='table-wrap'><table>
+        <tr><th>Cause</th><th>Pull-up fixes it?</th><th>SW debounce fixes it?</th><th>HW filter fixes it?</th></tr>
+        <tr><td>Floating pin (no pull)</td><td>✓ Yes</td><td>Partially</td><td>Partially</td></tr>
+        <tr><td>Antenna / external EMI</td><td>Partially</td><td>Partially</td><td>✓ Yes</td></tr>
+        <tr><td>Contact bounce</td><td>✗ No</td><td>✓ Yes</td><td>✓ Yes</td></tr>
+      </table></div>
+      <p>In this lab the pull-up was already configured via DT overlay (<code>brcm,pull = &lt;2&gt;</code>), ruling out a floating pin. The actual cause was the jumper wire acting as an antenna — picking up EMI from the RPi3's switching regulators and USB power lines. The fix was driving GPIO23 cleanly via sysfs instead of a physical wire.</p>
+      <div class='warn'>Hardware problems and software problems look identical from the driver — both show up as spurious interrupts in dmesg. Always reason about the physical setup before touching code.</div>
+    </div>
+
+    <div class="section">
+      <h2>Verifying interrupt activity</h2>
+      <pre><code># More reliable than dmesg — pr_info can be rate-limited under high IRQ load
+cat /proc/interrupts | grep sanath
+
+184:   420   466   458   435   pinctrl-bcm2835   23 Edge   sanath-irq-lab</code></pre>
+      <p>Each column is the interrupt count on one CPU core. The BCM2837 is quad-core, so four columns appear.</p>
+    </div>
+
+    <div class="section">
+      <h2>Yocto meta layer</h2>
+      <p>The driver, DT overlay, and Makefile are packaged as a Yocto recipe in a custom <code>meta-sanath</code> layer on top of Kirkstone. The recipe handles cross-compilation and deployment to the RPi3 image automatically.</p>
+      <pre><code># Prevent Yocto from deleting work directory during active development
+RM_WORK_EXCLUDE += "sanath-dtbo"
+# Remove once the recipe is stable</code></pre>
+      <p><code>INHERIT += "rm_work"</code> in Yocto's default config deletes <code>tmp/work/</code> after every successful build to save ~30GB of disk space. Adding a recipe to <code>RM_WORK_EXCLUDE</code> preserves its work directory for debugging.</p>
+    </div>
+
+    <div class="section">
+      <h2>Source</h2>
+      <a href='https://github.com/sanathsapre/rpi-camera-driver-lab' target='_blank' rel='noopener' class='source-link'>↗ rpi-camera-driver-lab / meta-sanath</a>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="07.html">← 07. BBB GPIO Driver</a>
+      <a href="../index.html#journey">Back to journey →</a>
+    </div>
+
+  </div>
+</div>
+
+<footer class="footer">
+  <a href="../index.html#journey">← Journey</a>
+  <span>Arc II · The Camera Driver Lab</span>
+</footer>
+
+</body>
+</html>

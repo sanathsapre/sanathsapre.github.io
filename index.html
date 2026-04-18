@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sanath Kumar — Learning Linux from the Inside</title>
 <meta name="description" content="A documented learning journey through Linux kernel internals, camera pipelines, and embedded systems.">
@@ -395,7 +398,7 @@ a.chapter:hover .ch-arrow { opacity: 1; transform: translateX(0); }
       <span class="arc-badge-roman">I</span>
     </div>
     <div class="arc-content">
-      <div class="arc-label">Arc I · In progress</div>
+      <div class="arc-label">Arc I · Complete</div>
       <h2>The Linux Driver Lab</h2>
       <p class="arc-intro">
         I wanted to understand what actually happens when a camera frame moves through
@@ -562,13 +565,25 @@ a.chapter:hover .ch-arrow { opacity: 1; transform: translateX(0); }
     </div>
   </a>
 
-  <!-- Arc II divider -->
-  <div class="arc-divider">
-    <span class="arc-divider-label">Arc II · In progress</span>
+  <!-- Arc II -->
+  <div class="arc">
+    <div class="arc-badge">
+      <span style="font-size:9px;opacity:.6;letter-spacing:.08em">ARC</span>
+      <span class="arc-badge-roman">II</span>
+    </div>
+    <div class="arc-content">
+      <div class="arc-label">Arc II · In progress</div>
+      <h2>The Camera Driver Lab</h2>
+      <p class="arc-intro">
+        Arc I answered how the kernel works. Arc II asks how a camera frame actually
+        gets into it. Real silicon, real build system — platform drivers, Device Tree
+        overlays, V4L2, and the full camera pipeline on RPi3 with Yocto.
+      </p>
+    </div>
   </div>
 
   <!-- Chapter 08 -->
-  <a href="https://github.com/sanathsapre/rpi-camera-driver-lab" target="_blank" class="chapter">
+  <a href="drivers/08.html" class="chapter">
     <div class="ch-top">
       <span class="ch-num">08</span>
       <span class="ch-title">RPi3 Platform Driver + GPIO Interrupt — Yocto</span>
