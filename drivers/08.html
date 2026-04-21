@@ -21,11 +21,13 @@
     <div class="driver-arc">Arc II · The Camera Driver Lab</div>
     <div class="driver-num">Chapter 08</div>
     <h1>RPi3 Platform Driver + GPIO Interrupt — Yocto</h1>
-    <p class="driver-sub">First driver on real silicon with a real build system. Platform driver probed via Device Tree overlay — GPIO23 interrupt handled in kernel, built and deployed through a custom Yocto meta layer.</p>
+    <p class="driver-sub">First driver on real silicon with a real build system. Platform driver probed via Device Tree overlay — GPIO23 interrupt with workqueue bottom half, atomic counter exposed via /dev node, built and deployed through a custom Yocto meta layer.</p>
     <div class="driver-tags">
       <span class="dtag">platform_driver</span>
       <span class="dtag">DT overlay</span>
       <span class="dtag">request_irq</span>
+      <span class="dtag">workqueue</span>
+      <span class="dtag">atomic_t</span>
       <span class="dtag">devm_</span>
       <span class="dtag">Yocto/Kirkstone</span>
       <span class="dtag">RPi3</span>
@@ -206,6 +208,113 @@ cat /proc/interrupts | grep sanath
 RM_WORK_EXCLUDE += "sanath-dtbo"
 # Remove once the recipe is stable</code></pre>
       <p><code>INHERIT += "rm_work"</code> in Yocto's default config deletes <code>tmp/work/</code> after every successful build to save ~30GB of disk space. Adding a recipe to <code>RM_WORK_EXCLUDE</code> preserves its work directory for debugging.</p>
+    </div>
+
+
+    <div class="section">
+      <h2>Workqueue bottom half</h2>
+      <p>The IRQ handler must never sleep and must complete as fast as possible — it interrupts the CPU mid-execution. All real work is deferred to a workqueue which runs in process context where sleeping, memory allocation, and longer operations are safe.</p>
+      <p><code>INIT_WORK</code> is used instead of <code>DECLARE_WORK</code> because the <code>work_struct</code> is embedded inside the per-device struct. Each device instance gets its own work item. <code>container_of</code> recovers the parent struct inside the work function.</p>
+      <pre><code>struct sanath_irq_data {
+    int irq;
+    atomic_t counter;
+    unsigned long last_irq;
+    struct work_struct work;   /* embedded — one per device instance */
+};
+
+/* in probe() — initialise once */
+INIT_WORK(&amp;data-&gt;work, sanath_irq_work);
+
+/* IRQ handler — top half */
+static irqreturn_t sanath_irq_handler(int irq, void *dev_id)
+{
+    struct sanath_irq_data *data = dev_id;
+    unsigned long now = jiffies;
+
+    if (now - data-&gt;last_irq &lt; msecs_to_jiffies(50))
+        return IRQ_HANDLED;  /* debounce */
+
+    data-&gt;last_irq = now;
+    schedule_work(&amp;data-&gt;work);  /* defer everything else */
+    return IRQ_HANDLED;
+}
+
+/* work function — bottom half, process context */
+static void sanath_irq_work(struct work_struct *work)
+{
+    struct sanath_irq_data *data =
+        container_of(work, struct sanath_irq_data, work);
+    atomic_inc(&amp;data-&gt;counter);
+    pr_info("sanath-irq-lab: IRQ fired, counter = %d\n",
+            atomic_read(&amp;data-&gt;counter));
+}</code></pre>
+      <div class='table-wrap'><table>
+        <tr><th>Mechanism</th><th>Context</th><th>Can sleep?</th><th>Use when</th></tr>
+        <tr><td>IRQ handler (top half)</td><td>hardIRQ atomic</td><td>Never</td><td>Minimal — save timestamp, schedule work</td></tr>
+        <tr><td>Workqueue (bottom half)</td><td>Process</td><td>Yes</td><td>All real work — counter, logging, wake queue</td></tr>
+        <tr><td>Tasklet</td><td>softIRQ atomic</td><td>Never</td><td>Low latency, no sleeping needed (deprecated)</td></tr>
+      </table></div>
+    </div>
+
+    <div class="section">
+      <h2>atomic_t — race-free counter without locking</h2>
+      <p>The counter is incremented in the work function and read in <code>etx_read()</code>. A mutex would technically work since both run in process context — but <code>atomic_t</code> is the correct choice for a single integer because it is race-free by design, has no locking overhead, and works in any context including atomic.</p>
+      <pre><code>/* wrong — unsigned long with no protection */
+data-&gt;counter++;
+
+/* correct — atomic, race-free, works in any context */
+atomic_inc(&amp;data-&gt;counter);
+unsigned long val = atomic_read(&amp;data-&gt;counter);</code></pre>
+      <div class='table-wrap'><table>
+        <tr><th></th><th>atomic_t</th><th>mutex</th><th>spinlock</th></tr>
+        <tr><td>Use for</td><td>Single integer</td><td>Multiple variables, process context only</td><td>Data touched from IRQ context</td></tr>
+        <tr><td>Can sleep?</td><td>N/A</td><td>Yes</td><td>No</td></tr>
+        <tr><td>Works in IRQ?</td><td>Yes</td><td>No</td><td>Yes</td></tr>
+      </table></div>
+    </div>
+
+    <div class="section">
+      <h2>/dev node — exposing counter to userspace</h2>
+      <p>A character device exposes the IRQ counter via <code>read()</code>. The module registers both the platform driver and the char device from <code>module_init()</code> — <code>module_platform_driver()</code> macro cannot be used when the module also manages a char device.</p>
+      <pre><code>static ssize_t etx_read(struct file *filp, char __user *buf,
+                        size_t len, loff_t *off)
+{
+    char kbuf[32];
+    int kbuf_len;
+
+    if (*off &gt; 0)
+        return 0;  /* EOF — prevent cat from looping forever */
+
+    if (!g_data)
+        return -ENODEV;
+
+    kbuf_len = snprintf(kbuf, sizeof(kbuf), "%d\n",
+                        atomic_read(&amp;g_data-&gt;counter));
+
+    if (copy_to_user(buf, kbuf, kbuf_len))
+        return -EFAULT;
+
+    *off += kbuf_len;
+    return kbuf_len;
+}</code></pre>
+      <p>The <code>*off &gt; 0</code> check is critical — without it, <code>cat</code> calls <code>read()</code> in a loop forever because it never sees EOF (return 0). After returning data, <code>*off</code> is advanced by bytes returned. On the next call <code>*off &gt; 0</code> triggers and returns 0, signalling EOF.</p>
+      <pre><code># Verify
+cat /dev/sanath_queue
+5</code></pre>
+    </div>
+
+    <div class="section">
+      <h2>cancel_work_sync in remove()</h2>
+      <p>Without <code>cancel_work_sync</code>, a use-after-free is possible: <code>rmmod</code> triggers <code>remove()</code>, <code>devm_</code> frees <code>sanath_irq_data</code>, then the work function runs and accesses freed memory — kernel oops.</p>
+      <p><code>cancel_work_sync(&amp;data-&gt;work)</code> blocks until any pending or in-flight work completes before <code>remove()</code> continues. The data struct is guaranteed valid for the entire duration of the work function.</p>
+      <pre><code>static int sanath_irq_remove(struct platform_device *pdev)
+{
+    struct sanath_irq_data *data = platform_get_drvdata(pdev);
+    cancel_work_sync(&amp;data-&gt;work);  /* wait for in-flight work */
+    dev_info(&amp;pdev->dev, "sanath-irq-lab removed\n");
+    return 0;  /* devm_ handles free_irq and kfree automatically */
+}</code></pre>
+      <p><code>devm_request_irq()</code> means <code>free_irq()</code> is called automatically — no manual cleanup needed in <code>remove()</code> beyond <code>cancel_work_sync</code>.</p>
     </div>
 
     <div class="section">
