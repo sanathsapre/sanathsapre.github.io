@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>09 — V4L2 Capture Driver — videobuf2 + platform · Embedded Forge</title>
+<link rel="stylesheet" href="../driver.css">
+</head>
+<body>
+
+<nav class="nav">
+  <a href="../index.html" class="nav-name">Sanath Kumar P Sapre</a>
+  <a href="../index.html#journey" class="nav-back">← Back to journey</a>
+</nav>
+
+<div class="page">
+  <div class="driver-hero">
+    <div class="driver-arc">Arc II · The Camera Driver Lab</div>
+    <div class="driver-num">Chapter 09</div>
+    <h1>V4L2 Capture Driver — videobuf2 + platform</h1>
+    <p class="driver-sub">A minimal but complete V4L2 capture driver built on top of the platform driver model. Registers a /dev/video50 node, manages buffers through videobuf2-vmalloc, and uses a kernel timer to simulate frame delivery at ~30fps — the full capture pipeline in one stub driver.</p>
+    <div class="driver-tags">
+      <span class="dtag">v4l2_device</span>
+      <span class="dtag">video_device</span>
+      <span class="dtag">vb2_queue</span>
+      <span class="dtag">vb2_ops</span>
+      <span class="dtag">vb2_vmalloc</span>
+      <span class="dtag">vidioc_*</span>
+      <span class="dtag">platform_driver</span>
+      <span class="dtag">timer_list</span>
+      <span class="dtag">spinlock</span>
+    </div>
+  </div>
+
+  <div class="driver-body">
+
+    <div class="section">
+      <h2>Why this driver?</h2>
+      <p>Lab 08 proved the platform driver model — DT overlay, probe(), devm_, workqueue. But a real camera driver has two more layers on top: the V4L2 device registration layer that gives userspace a <code>/dev/videoN</code> node, and the buffer management layer (videobuf2) that handles the QBUF/DQBUF dance between the kernel and userspace. This lab adds both. No real sensor yet — a kernel timer simulates frame delivery — but every structural piece of a production capture driver is here.</p>
+    </div>
+
+    <div class="section">
+      <h2>The two paths in a V4L2 capture driver</h2>
+      <p>Before touching any code, it helps to see the separation clearly. A V4L2 capture driver has two completely different paths that never touch each other:</p>
+      <div class='table-wrap'><table>
+        <tr><th>Path</th><th>What it does</th><th>Key structs</th></tr>
+        <tr><td>Control path</td><td>Userspace opens the device, negotiates format, requests buffers, starts/stops streaming</td><td>video_device, v4l2_ioctl_ops, vidioc_*</td></tr>
+        <tr><td>Data path</td><td>Kernel fills buffers with pixel data and hands them to userspace</td><td>vb2_queue, vb2_ops, vb2_buffer</td></tr>
+      </table></div>
+      <p>The control path is about configuration. The data path is about buffer ownership. Understanding which path a given function belongs to is the key to reading any V4L2 driver.</p>
+    </div>
+
+    <div class="section">
+      <h2>Device Tree overlay</h2>
+      <p>The capture driver is still a platform driver underneath. The DT overlay creates the platform device node that triggers <code>probe()</code>.</p>
+      <pre><code>/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "brcm,bcm2837";
+
+    fragment@0 {
+        target-path = "/";
+        __overlay__ {
+            sanath_capture: sanath-capture {
+                compatible = "sanath-capture-lab";
+                status = "okay";
+            };
+        };
+    };
+};</code></pre>
+      <p>No GPIO or interrupt bindings here — this driver has no hardware interrupt. The compatible string <code>"sanath-capture-lab"</code> matches the driver's <code>of_match_table</code> and causes <code>probe()</code> to be called.</p>
+    </div>
+
+    <div class="section">
+      <h2>Per-device struct — everything in one place</h2>
+      <p>The entire driver state lives in one struct allocated per device in <code>probe()</code>. No globals.</p>
+      <pre><code>struct sanath_buffer {
+    struct vb2_buffer   vb;    /* MUST be first — container_of arithmetic */
+    struct list_head    list;
+};
+
+struct sanath_capture_dev {
+    struct v4l2_device   v4l2_dev;   /* V4L2 registration handle */
+    struct video_device  vdev;       /* the /dev/videoN node */
+    struct vb2_queue     queue;      /* videobuf2 queue */
+    struct mutex         lock;       /* serialises ioctl calls */
+    struct list_head     buf_list;   /* queued buffers waiting for data */
+    spinlock_t           buf_lock;   /* protects buf_list from IRQ context */
+    struct timer_list    etx_timer;  /* simulates sensor frame interrupt */
+    uint16_t             frame_count;
+};</code></pre>
+      <div class='warn'><code>vb</code> must be the first member of <code>sanath_buffer</code>. The <code>container_of</code> call in <code>buffer_queue()</code> recovers the <code>sanath_buffer</code> from a <code>vb2_buffer *</code> — this only works correctly when <code>vb</code> is at offset 0.</div>
+    </div>
+
+    <div class="section">
+      <h2>probe() — registration order matters</h2>
+      <p>The order of operations in <code>probe()</code> is not arbitrary. Each step depends on the one before it.</p>
+      <pre><code>static int sanath_v4l2_probe(struct platform_device *pdev)
+{
+    struct sanath_capture_dev *priv;
+    int ret;
+
+    priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
+    if (!priv)
+        return -ENOMEM;
+
+    platform_set_drvdata(pdev, priv);
+    mutex_init(&priv->lock);
+    spin_lock_init(&priv->buf_lock);
+    INIT_LIST_HEAD(&priv->buf_list);
+    timer_setup(&priv->etx_timer, timer_callback, 0);
+
+    /* Step 1: register the V4L2 device — root of the V4L2 hierarchy */
+    ret = v4l2_device_register(&pdev->dev, &priv->v4l2_dev);
+    if (ret)
+        goto err_reg;
+
+    /* Step 2: initialise the vb2 queue */
+    priv->queue.type             = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    priv->queue.io_modes         = VB2_MMAP;
+    priv->queue.ops              = &sanath_vb2_ops;
+    priv->queue.mem_ops          = &vb2_vmalloc_memops;
+    priv->queue.buf_struct_size  = sizeof(struct sanath_buffer);
+    priv->queue.lock             = &priv->lock;
+    priv->queue.drv_priv         = priv;
+    priv->queue.dev              = &pdev->dev;
+    priv->queue.timestamp_flags  = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+
+    ret = vb2_queue_init(&priv->queue);
+    if (ret)
+        goto err_init;
+
+    /* Step 3: register the video_device node */
+    strscpy(priv->vdev.name, "Sanath-Capture", sizeof(priv->vdev.name));
+    priv->vdev.fops        = &sanath_vdev_fops;
+    priv->vdev.ioctl_ops   = &sanath_vdev_ioctl_ops;
+    priv->vdev.v4l2_dev    = &priv->v4l2_dev;
+    priv->vdev.lock        = &priv->lock;
+    priv->vdev.queue       = &priv->queue;
+    priv->vdev.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+    priv->vdev.release     = video_device_release_empty;
+    video_set_drvdata(&priv->vdev, priv);
+
+    ret = video_register_device(&priv->vdev, VFL_TYPE_VIDEO, 50);
+    if (ret)
+        goto err_vb2;
+
+    return 0;
+
+err_vb2:
+    vb2_queue_release(&priv->queue);
+err_init:
+    v4l2_device_unregister(&priv->v4l2_dev);
+err_reg:
+    return ret;
+}</code></pre>
+      <div class='table-wrap'><table>
+        <tr><th>Step</th><th>Why this order</th></tr>
+        <tr><td>v4l2_device_register first</td><td>video_device needs a parent v4l2_device — the pointer is set before video_register_device</td></tr>
+        <tr><td>vb2_queue_init before video_register_device</td><td>vdev.queue must point to an initialised queue before the node is exposed to userspace</td></tr>
+        <tr><td>video_set_drvdata before video_register_device</td><td>Once the node is live, fops can fire immediately — drvdata must be set first</td></tr>
+      </table></div>
+    </div>
+
+    <div class="section">
+      <h2>vb2_ops — the buffer lifecycle contract</h2>
+      <p>videobuf2 manages buffer state through a set of callbacks. Each callback has a specific contract — violating it causes silent corruption or kernel oops.</p>
+      <pre><code>static int queue_setup(struct vb2_queue *vq,
+        unsigned int *num_buffers, unsigned int *num_planes,
+        unsigned int sizes[], struct device *alloc_devs[])
+{
+    *num_planes = 1;
+    sizes[0] = 640 * 480 * 2;   /* YUYV — hardcoded for stub */
+    return 0;
+}
+
+static int buffer_prepare(struct vb2_buffer *vb)
+{
+    vb2_set_plane_payload(vb, 0, 640 * 480 * 2);
+    return 0;
+}
+
+static void buffer_queue(struct vb2_buffer *vb)
+{
+    struct sanath_capture_dev *priv = vb2_get_drv_priv(vb->vb2_queue);
+    struct sanath_buffer *buf =
+        container_of(vb, struct sanath_buffer, vb);
+    unsigned long flags;
+
+    spin_lock_irqsave(&priv->buf_lock, flags);
+    list_add_tail(&buf->list, &priv->buf_list);
+    spin_unlock_irqrestore(&priv->buf_lock, flags);
+}
+
+static int start_streaming(struct vb2_queue *vq, unsigned int count)
+{
+    struct sanath_capture_dev *priv = vb2_get_drv_priv(vq);
+    mod_timer(&priv->etx_timer, jiffies + msecs_to_jiffies(33));
+    return 0;
+}
+
+static void stop_streaming(struct vb2_queue *vq)
+{
+    struct sanath_capture_dev *priv = vb2_get_drv_priv(vq);
+    struct sanath_buffer *buf, *tmp;
+    unsigned long flags;
+
+    del_timer_sync(&priv->etx_timer);   /* wait for in-flight callback */
+
+    spin_lock_irqsave(&priv->buf_lock, flags);
+    list_for_each_entry_safe(buf, tmp, &priv->buf_list, list) {
+        list_del(&buf->list);
+        vb2_buffer_done(&buf->vb, VB2_BUF_STATE_ERROR);
+    }
+    spin_unlock_irqrestore(&priv->buf_lock, flags);
+}</code></pre>
+      <div class='table-wrap'><table>
+        <tr><th>Callback</th><th>When called</th><th>Contract</th></tr>
+        <tr><td>queue_setup</td><td>VIDIOC_REQBUFS</td><td>Tell vb2 how many planes and the size of each</td></tr>
+        <tr><td>buf_prepare</td><td>VIDIOC_QBUF</td><td>Validate and set plane payload size — last chance to reject a bad buffer</td></tr>
+        <tr><td>buf_queue</td><td>After buf_prepare</td><td>Take ownership of the buffer — add it to driver's internal queue</td></tr>
+        <tr><td>start_streaming</td><td>VIDIOC_STREAMON</td><td>Start hardware (or timer). count = buffers already queued</td></tr>
+        <tr><td>stop_streaming</td><td>VIDIOC_STREAMOFF or error</td><td>MUST return every buffer via vb2_buffer_done before returning</td></tr>
+      </table></div>
+      <div class='warn'><code>stop_streaming</code> has a hard contract: every buffer that was handed to the driver via <code>buf_queue</code> must be returned via <code>vb2_buffer_done</code> before <code>stop_streaming</code> returns. Failure causes a vb2 hang — userspace blocks on DQBUF forever.</div>
+    </div>
+
+    <div class="section">
+      <h2>Timer callback — simulating a frame interrupt</h2>
+      <p>In a real driver this would be a DMA completion interrupt. Here a kernel timer fires every 33ms (~30fps) and fills the next queued buffer with a solid colour that changes each frame — enough to verify the DQBUF path end-to-end.</p>
+      <pre><code>void timer_callback(struct timer_list *data)
+{
+    struct sanath_capture_dev *priv =
+        container_of(data, struct sanath_capture_dev, etx_timer);
+    struct sanath_buffer *buf;
+    unsigned long flags;
+
+    spin_lock_irqsave(&priv->buf_lock, flags);
+    if (!list_empty(&priv->buf_list)) {
+        buf = list_first_entry(&priv->buf_list,
+                               struct sanath_buffer, list);
+
+        void *vaddr = vb2_plane_vaddr(&buf->vb, 0);
+        memset(vaddr, priv->frame_count & 0xFF, 640 * 480 * 2);
+        priv->frame_count++;
+
+        list_del(&buf->list);
+        vb2_buffer_done(&buf->vb, VB2_BUF_STATE_DONE);
+    }
+    spin_unlock_irqrestore(&priv->buf_lock, flags);
+
+    mod_timer(&priv->etx_timer, jiffies + msecs_to_jiffies(33));
+}</code></pre>
+      <p>The spinlock is mandatory here — the timer callback runs in softirq context and the same list is touched from <code>buf_queue</code> (process context) and <code>stop_streaming</code> (process context). A spinlock with irqsave is the correct primitive when one side can be in interrupt context.</p>
+      <p><code>vb2_buffer_done(vb, VB2_BUF_STATE_DONE)</code> hands the buffer back to vb2, which marks it ready for userspace to DQBUF. This is the moment the buffer changes ownership from driver to vb2.</p>
+    </div>
+
+    <div class="section">
+      <h2>vidioc_* handlers — the control path</h2>
+      <p>The ioctl handlers answer userspace questions about format and capabilities. For a stub driver they are hardcoded — no negotiation.</p>
+      <pre><code>static int vidioc_querycap(struct file *file, void *priv,
+        struct v4l2_capability *cap)
+{
+    strscpy(cap->driver, "sanath-capture", sizeof(cap->driver));
+    strscpy(cap->card,   "Sanath Capture", sizeof(cap->card));
+    strscpy(cap->bus_info, "platform:sanath-capture", sizeof(cap->bus_info));
+    return 0;
+}
+
+static int vidioc_enum_fmt(struct file *file, void *priv,
+        struct v4l2_fmtdesc *f)
+{
+    if (f->index > 0)
+        return -EINVAL;   /* only one format supported */
+    f->pixelformat = V4L2_PIX_FMT_YUYV;
+    return 0;
+}
+
+static int vidioc_g_fmt(struct file *file, void *priv,
+        struct v4l2_format *f)
+{
+    f->fmt.pix.width        = 640;
+    f->fmt.pix.height       = 480;
+    f->fmt.pix.pixelformat  = V4L2_PIX_FMT_YUYV;
+    f->fmt.pix.field        = V4L2_FIELD_NONE;
+    f->fmt.pix.bytesperline = 640 * 2;
+    f->fmt.pix.sizeimage    = 640 * 480 * 2;
+    f->fmt.pix.colorspace   = V4L2_COLORSPACE_SRGB;
+    return 0;
+}
+
+static int vidioc_s_fmt(struct file *file, void *priv,
+        struct v4l2_format *f)
+{
+    return vidioc_g_fmt(file, priv, f);  /* ignore requested format, return ours */
+}</code></pre>
+      <p>Six of the ioctl ops delegate directly to vb2 helper functions — <code>vb2_ioctl_reqbufs</code>, <code>vb2_ioctl_querybuf</code>, <code>vb2_ioctl_qbuf</code>, <code>vb2_ioctl_dqbuf</code>, <code>vb2_ioctl_streamon</code>, <code>vb2_ioctl_streamoff</code>. These helpers call into the vb2 state machine, which eventually calls the driver's own <code>vb2_ops</code>. The driver never handles QBUF directly — it only sees <code>buf_queue()</code>.</p>
+    </div>
+
+    <div class="section">
+      <h2>vdev_fops — delegating file operations to vb2</h2>
+      <p>File operations on the <code>/dev/videoN</code> node are almost entirely handled by vb2 and V4L2 core helpers. The driver provides no custom read or write.</p>
+      <pre><code>static const struct v4l2_file_operations sanath_vdev_fops = {
+    .owner          = THIS_MODULE,
+    .open           = v4l2_fh_open,      /* V4L2 file handle bookkeeping */
+    .release        = vb2_fop_release,   /* releases buffers on close */
+    .poll           = vb2_fop_poll,      /* wakes userspace when buffer ready */
+    .mmap           = vb2_fop_mmap,      /* maps buffer memory into userspace */
+    .unlocked_ioctl = video_ioctl2,      /* routes ioctls to vidioc_* table */
+};</code></pre>
+      <p><code>video_ioctl2</code> is the V4L2 core ioctl dispatcher — it validates ioctl arguments, acquires the device lock, and calls the appropriate <code>vidioc_*</code> handler from <code>sanath_vdev_ioctl_ops</code>.</p>
+    </div>
+
+    <div class="section">
+      <h2>remove() — teardown order is the reverse of probe()</h2>
+      <pre><code>static int sanath_v4l2_remove(struct platform_device *pdev)
+{
+    struct sanath_capture_dev *priv = platform_get_drvdata(pdev);
+    video_unregister_device(&priv->vdev);   /* stop new fops from firing */
+    vb2_queue_release(&priv->queue);        /* return all buffers */
+    v4l2_device_unregister(&priv->v4l2_dev);
+    return 0;
+}</code></pre>
+      <p><code>video_unregister_device</code> must come first — it closes the <code>/dev/videoN</code> node so no new ioctl or mmap calls can arrive while teardown is happening. Only then is it safe to release the queue and unregister the V4L2 device.</p>
+    </div>
+
+    <div class="section">
+      <h2>Buffer ownership model — who holds the buffer when</h2>
+      <div class='table-wrap'><table>
+        <tr><th>State</th><th>Owner</th><th>How it got there</th></tr>
+        <tr><td>After REQBUFS</td><td>vb2 core</td><td>vb2 allocates buffers via mem_ops (vmalloc here)</td></tr>
+        <tr><td>After QBUF</td><td>Driver (buf_queue called)</td><td>vb2 calls buf_queue → driver adds to buf_list</td></tr>
+        <tr><td>After timer fills it</td><td>vb2 core</td><td>Driver calls vb2_buffer_done(VB2_BUF_STATE_DONE)</td></tr>
+        <tr><td>After DQBUF</td><td>Userspace</td><td>vb2 hands the mmap'd address to the application</td></tr>
+        <tr><td>After next QBUF</td><td>Driver again</td><td>Application re-queues the buffer for the next frame</td></tr>
+      </table></div>
+    </div>
+
+    <div class="section">
+      <h2>Verifying with v4l2-ctl</h2>
+      <pre><code># Check the node registered
+ls -la /dev/video50
+
+# Query capabilities
+v4l2-ctl -d /dev/video50 --info
+
+# Capture 10 frames
+v4l2-ctl -d /dev/video50 \
+    --set-fmt-video=width=640,height=480,pixelformat=YUYV \
+    --stream-mmap --stream-count=10</code></pre>
+    </div>
+
+    <div class="section">
+      <h2>Source</h2>
+      <a href='https://github.com/sanathsapre/rpi-camera-driver-lab' target='_blank' rel='noopener' class='source-link'>↗ rpi-camera-driver-lab / meta-sanath</a>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="08.html">← 08. RPi3 Platform Driver + GPIO</a>
+      <a href="../index.html#journey">Back to journey →</a>
+    </div>
+
+  </div>
+</div>
+
+<footer class="footer">
+  <a href="../index.html#journey">← Journey</a>
+  <span>Arc II · The Camera Driver Lab</span>
+</footer>
+
+</body>
+</html>

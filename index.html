@@ -381,9 +381,9 @@ a.chapter:hover .ch-arrow { opacity: 1; transform: translateX(0); }
   <div class="hero-kicker">learning in public</div>
   <h1>Learning Linux<br>from the <em>inside out.</em></h1>
   <p class="hero-body">
-    I work on camera pipelines and video streaming on Linux. This site documents
-    how I got here — the questions I asked, the kernel internals I had to understand,
-    and the drivers I built to answer them.
+    I build camera pipelines and video streaming systems on Linux. This site documents
+    my return to the kernel — the questions I'm asking, the internals I'm rebuilding,
+    and the drivers I'm writing to answer them.
   </p>
   <div class="hero-scroll">↓ &nbsp; scroll to read the story</div>
 </section>
@@ -582,6 +582,28 @@ a.chapter:hover .ch-arrow { opacity: 1; transform: translateX(0); }
     </div>
   </div>
 
+  <!-- Chapter 09 -->
+  <a href="drivers/09.html" class="chapter">
+    <div class="ch-top">
+      <span class="ch-num">09</span>
+      <span class="ch-title">V4L2 Capture Driver — videobuf2 + platform</span>
+      <span class="ch-arrow">→</span>
+    </div>
+    <p class="ch-sub">
+      A minimal but complete V4L2 capture driver. Registers /dev/video50, manages
+      buffers through videobuf2-vmalloc, and uses a kernel timer to simulate 30fps
+      frame delivery — the full capture pipeline end to end.
+    </p>
+    <div class="ch-tags">
+      <span class="ch-tag">v4l2_device</span>
+      <span class="ch-tag">vb2_queue</span>
+      <span class="ch-tag">vb2_ops</span>
+      <span class="ch-tag">vidioc_*</span>
+      <span class="ch-tag">spinlock</span>
+      <span class="ch-tag">timer_list</span>
+    </div>
+  </a>
+
   <!-- Chapter 08 -->
   <a href="drivers/08.html" class="chapter">
     <div class="ch-top">
@@ -633,7 +655,7 @@ a.chapter:hover .ch-arrow { opacity: 1; transform: translateX(0); }
       GStreamer, V4L2, RTSP, WebRTC on ARM targets is where I come from.
     </p>
     <p>
-      The past few years have taken me away from kernel work. This site is me
+      I stepped away from kernel work for a few years. This site is me
       finding my way back — rebuilding from the ground up, in public, one driver
       at a time. I think there's more value in showing the process than in
       presenting a polished portfolio.
