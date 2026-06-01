@@ -582,28 +582,6 @@ a.chapter:hover .ch-arrow { opacity: 1; transform: translateX(0); }
     </div>
   </div>
 
-  <!-- Chapter 09 -->
-  <a href="drivers/09.html" class="chapter">
-    <div class="ch-top">
-      <span class="ch-num">09</span>
-      <span class="ch-title">V4L2 Capture Driver — videobuf2 + platform</span>
-      <span class="ch-arrow">→</span>
-    </div>
-    <p class="ch-sub">
-      A minimal but complete V4L2 capture driver. Registers /dev/video50, manages
-      buffers through videobuf2-vmalloc, and uses a kernel timer to simulate 30fps
-      frame delivery — the full capture pipeline end to end.
-    </p>
-    <div class="ch-tags">
-      <span class="ch-tag">v4l2_device</span>
-      <span class="ch-tag">vb2_queue</span>
-      <span class="ch-tag">vb2_ops</span>
-      <span class="ch-tag">vidioc_*</span>
-      <span class="ch-tag">spinlock</span>
-      <span class="ch-tag">timer_list</span>
-    </div>
-  </a>
-
   <!-- Chapter 08 -->
   <a href="drivers/08.html" class="chapter">
     <div class="ch-top">
@@ -628,6 +606,28 @@ a.chapter:hover .ch-arrow { opacity: 1; transform: translateX(0); }
       Key insight: the platform bus matches drivers to hardware via the compatible
       string in the Device Tree — not hardcoded addresses. And a floating wire near
       a GPIO pin is enough to generate spurious interrupts; physics shows up in dmesg.
+    </div>
+  </a>
+
+  <!-- Chapter 09 -->
+  <a href="drivers/09.html" class="chapter">
+    <div class="ch-top">
+      <span class="ch-num">09</span>
+      <span class="ch-title">V4L2 Capture Driver — videobuf2 + platform</span>
+      <span class="ch-arrow">→</span>
+    </div>
+    <p class="ch-sub">
+      A minimal but complete V4L2 capture driver. Registers /dev/video50, manages
+      buffers through videobuf2-vmalloc, and uses a kernel timer to simulate 30fps
+      frame delivery — the full capture pipeline end to end.
+    </p>
+    <div class="ch-tags">
+      <span class="ch-tag">v4l2_device</span>
+      <span class="ch-tag">vb2_queue</span>
+      <span class="ch-tag">vb2_ops</span>
+      <span class="ch-tag">vidioc_*</span>
+      <span class="ch-tag">spinlock</span>
+      <span class="ch-tag">timer_list</span>
     </div>
   </a>
 
