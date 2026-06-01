@@ -629,6 +629,11 @@ a.chapter:hover .ch-arrow { opacity: 1; transform: translateX(0); }
       <span class="ch-tag">spinlock</span>
       <span class="ch-tag">timer_list</span>
     </div>
+    <div class="ch-insight">
+      Key insight: stop_streaming has a hard contract — every buffer handed to the
+      driver via buf_queue must be returned via vb2_buffer_done before it returns.
+      Miss one and userspace blocks on DQBUF forever.
+    </div>
   </a>
 
   <!-- Coming next -->
